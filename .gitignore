@@ -1,0 +1,26 @@
+# CAIOS — ignore secrets and build artifacts (CAIOS-MASTER-001 §19)
+.env
+*.env
+!*.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node (frontend prototype tooling, if added later)
+node_modules/
+
+# Local databases / dumps
+*.dump
+*.dump.age
+*.sqlite3
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

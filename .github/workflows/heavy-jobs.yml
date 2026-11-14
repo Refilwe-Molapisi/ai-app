@@ -1,0 +1,48 @@
+# Scheduled heavy-jobs trigger — the "muscle" of Layer 2.
+# Reference: docs/01-hosting-blueprint.md §4.1 (principle 3).
+# GitHub Actions runners (4 vCPU / 16 GB) invoke the backend's maintenance tick,
+# which routes long-running work (bulk extraction, embedding re-indexing,
+# off-peak DeepSeek generation) that does not fit the 25 s /jobs/run budget.
+# Secrets required: CAIOS_MAINTENANCE_URL, CAIOS_MAINTENANCE_SECRET
+
+name: heavy-jobs
+
+on:
+  schedule:
+    - cron: "0 1 * * *"      # daily 01:00 UTC ≈ 03:00 SAST — DeepSeek off-peak window
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Maintenance task to request"
+        required: false
+        default: "all"
+
+concurrency:
+  group: heavy-jobs
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Request maintenance tick
+        env:
+          CAIOS_MAINTENANCE_URL: ${{ secrets.CAIOS_MAINTENANCE_URL }}
+          CAIOS_MAINTENANCE_SECRET: ${{ secrets.CAIOS_MAINTENANCE_SECRET }}
+          TASK: ${{ github.event.inputs.task || 'all' }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/tick.json -w "%{http_code}" \
+            -X POST "${CAIOS_MAINTENANCE_URL%/}/maintenance/tick" \
+            -H "Content-Type: application/json" \
+            -H "X-Job-Secret: ${CAIOS_MAINTENANCE_SECRET}" \
+            -d "{\"task\": \"${TASK}\"}")
+          cat /tmp/tick.json
+          test "$code" -lt 500
+
+      # NOTE: minutes budget ≈ 2–5 min/run incl. setup; daily cadence uses well
+      # under 200 min/month of the 2,000 free minutes (private repo).
+      # If a future task must run >25 s of CPU locally (e.g. embedding a large
+      # corpus), check out the repo and run the processing script HERE against
+      # Supabase/Z1 directly — same adapters, same env-var contract.

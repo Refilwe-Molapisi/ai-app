@@ -1,0 +1,88 @@
+# CAIOS local development stack — Layer 1 of the $0 hosting strategy
+# Reference: docs/01-hosting-blueprint.md §3
+# Usage: docker compose -f infra/docker-compose.yml up --build
+# The same backend image runs locally and on Render — only env vars change.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: caios-db
+    environment:
+      POSTGRES_USER: ${LOCAL_DB_USER:-caios}
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:-caios_local_dev}
+      POSTGRES_DB: ${LOCAL_DB_NAME:-caios}
+    ports:
+      - "5432:5432"
+    volumes:
+      - caios_pgdata:/var/lib/postgresql/data
+      - ../backend/app/jobs/schema.sql:/docker-entrypoint-initdb.d/01-jobs-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LOCAL_DB_USER:-caios} -d ${LOCAL_DB_NAME:-caios}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: caios-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # --- runtime ---
+      CAIOS_ENV: development
+      DATABASE_URL: postgresql://${LOCAL_DB_USER:-caios}:${LOCAL_DB_PASSWORD:-caios_local_dev}@db:5432/${LOCAL_DB_NAME:-caios}
+      # --- auth (Supabase) ---
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-}
+      SUPABASE_AUDIENCE: ${SUPABASE_AUDIENCE:-authenticated}
+      # --- adapters ---
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      EMBEDDING_ENDPOINT: ${EMBEDDING_ENDPOINT:-}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-caios-dev}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_REGION: ${STORAGE_REGION:-za-region}
+      # --- job runner ---
+      JOB_RUN_SECRET: ${JOB_RUN_SECRET:-change-me-local}
+      JOB_BATCH_SIZE: ${JOB_BATCH_SIZE:-5}
+      JOB_TIME_BUDGET_SECONDS: ${JOB_TIME_BUDGET_SECONDS:-25}
+      JOB_MAX_ATTEMPTS: ${JOB_MAX_ATTEMPTS:-3}
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Local always-on worker (Layer 2 equivalent is cron-triggered /jobs/run —
+  # this service exists only so development exercises the same handler code).
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: caios-worker
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CAIOS_ENV: development
+      DATABASE_URL: postgresql://${LOCAL_DB_USER:-caios}:${LOCAL_DB_PASSWORD:-caios_local_dev}@db:5432/${LOCAL_DB_NAME:-caios}
+      JOB_BATCH_SIZE: ${JOB_BATCH_SIZE:-5}
+      JOB_TIME_BUDGET_SECONDS: ${JOB_TIME_BUDGET_SECONDS:-25}
+      JOB_MAX_ATTEMPTS: ${JOB_MAX_ATTEMPTS:-3}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      EMBEDDING_ENDPOINT: ${EMBEDDING_ENDPOINT:-}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-caios-dev}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-}
+      STORAGE_REGION: ${STORAGE_REGION:-za-region}
+    command: ["python", "-m", "app.jobs.loop_worker"]
+
+volumes:
+  caios_pgdata:

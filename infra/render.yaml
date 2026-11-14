@@ -1,0 +1,53 @@
+# Render Blueprint — CAIOS backend on the free tier (Layer 2)
+# Deploy: Render → New → Blueprint → point at this repo, select infra/render.yaml
+# Reference: docs/01-hosting-blueprint.md §4
+#
+# Honest limits (Nov 2026): free plan = 750 instance-hrs/month, spins down after
+# 15 min idle, ~512 MB RAM. Keep-alive via cron-job.org (see blueprint §4.3).
+
+services:
+  - type: web
+    name: caios-api
+    runtime: docker
+    dockerfilePath: ../backend/Dockerfile
+    plan: free
+    region: frankfurt   # closest to ZA of the free regions; EU also suits EU-hosted Supabase
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: CAIOS_ENV
+        value: staging
+      - key: DATABASE_URL
+        sync: false    # set in dashboard: Supabase pooler connection string
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWKS_URL
+        sync: false    # https://<project>.supabase.co/auth/v1/.well-known/jwks.json
+      - key: SUPABASE_AUDIENCE
+        value: authenticated
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+      - key: EMBEDDING_ENDPOINT
+        sync: false
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_ACCESS_KEY
+        sync: false
+      - key: STORAGE_SECRET_KEY
+        sync: false
+      - key: STORAGE_REGION
+        sync: false
+      - key: JOB_RUN_SECRET
+        generateValue: true   # copy into cron-job.org headers after first deploy
+      - key: JOB_BATCH_SIZE
+        value: "5"
+      - key: JOB_TIME_BUDGET_SECONDS
+        value: "20"           # stay inside cron-job.org's ~30 s HTTP timeout
+      - key: JOB_MAX_ATTEMPTS
+        value: "3"
