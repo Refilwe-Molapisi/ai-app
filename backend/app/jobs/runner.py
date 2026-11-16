@@ -46,13 +46,16 @@ async def _handle_echo(job: Job) -> dict | None:
     return {"echo": job.payload, "attempts": job.attempts}
 
 
-def default_registry() -> dict[str, Handler]:
-    """Kind → handler map. Specialist-agent handlers (Phases 4–6) register here;
-    nothing else in the codebase needs to know how a job is executed."""
+def default_registry(queue: PostgresJobQueue | None = None) -> dict[str, Handler]:
+    """Kind → handler map. Handlers receive the runner-owned queue so pipelines
+    can chain follow-up jobs without opening extra pools. Specialist-agent
+    handlers (Phases 4–6) register here; nothing else in the codebase needs to
+    know how a job is executed."""
+    from app.knowledge.handlers import default_knowledge_handlers
+
     registry: dict[str, Handler] = {
         "demo.echo": _handle_echo,
-        # TODO(Phase 2): "knowledge.extract"  — document extraction
-        # TODO(Phase 2): "knowledge.embed"    — chunk + embed + pgvector upsert
+        **default_knowledge_handlers(queue),   # Phase 2: knowledge.extract / knowledge.embed
         # TODO(Phase 4): "assignment.step"    — workflow engine step executor
         # TODO(Phase 6): "report.generate"    — deliverable generation
     }
@@ -67,7 +70,7 @@ async def run_batch(
     batch_size: int | None = None,
     time_budget_seconds: int | None = None,
 ) -> BatchReport:
-    handlers = registry if registry is not None else default_registry()
+    handlers = registry if registry is not None else default_registry(queue=queue)
     limit = batch_size or settings.job_batch_size
     budget = time_budget_seconds or settings.job_time_budget_seconds
     worker_id = f"runner-{uuid.uuid4().hex[:8]}"

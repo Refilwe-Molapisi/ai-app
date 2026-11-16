@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.api.routes import health, jobs, maintenance
+from app.knowledge.routes import router as knowledge_router
 from app.jobs.queue import QueueUnavailable
 
 logging.basicConfig(
@@ -23,7 +24,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("caios")
 
-_SCHEMA_PATH = Path(__file__).resolve().parent / "jobs" / "schema.sql"
+_SCHEMA_PATHS = {
+    "jobs": Path(__file__).resolve().parent / "jobs" / "schema.sql",
+    "knowledge": Path(__file__).resolve().parent / "knowledge" / "schema.sql",
+}
 
 
 @asynccontextmanager
@@ -35,9 +39,15 @@ async def lifespan(app: FastAPI):
     try:
         from app.jobs.queue import PostgresJobQueue
         queue = PostgresJobQueue(settings)
-        queue.ensure_schema(_SCHEMA_PATH.read_text())
+        for label, path in _SCHEMA_PATHS.items():
+            try:
+                # Each schema ensures independently: a missing pgvector extension
+                # must not stop the queue bootstrap (and vice versa).
+                queue.ensure_schema(path.read_text())
+                logger.info("%s schema ensured", label)
+            except Exception:  # noqa: BLE001
+                logger.exception("%s schema bootstrap failed; /health stays available", label)
         queue.close()
-        logger.info("job queue schema ensured")
     except Exception:  # noqa: BLE001 — API must still boot for /health (keep-alive)
         logger.exception("job queue bootstrap failed; /health stays available")
     yield
@@ -48,8 +58,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="CAIOS API",
-        version="0.1.0",
-        description="Company AI Operations System — backend skeleton (Phases 0–4)",
+        version="0.2.0",
+        description="Company AI Operations System — Phases 0–4 foundations "
+                    "+ Phase 2 knowledge & document ingestion (§7, §9)",
         lifespan=lifespan,
     )
 
@@ -75,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(jobs.router)
     app.include_router(maintenance.router)
+    app.include_router(knowledge_router)
     return app
 
 

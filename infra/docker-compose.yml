@@ -16,6 +16,7 @@ services:
     volumes:
       - caios_pgdata:/var/lib/postgresql/data
       - ../backend/app/jobs/schema.sql:/docker-entrypoint-initdb.d/01-jobs-schema.sql:ro
+      - ../backend/app/knowledge/schema.sql:/docker-entrypoint-initdb.d/02-knowledge-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOCAL_DB_USER:-caios} -d ${LOCAL_DB_NAME:-caios}"]
       interval: 5s

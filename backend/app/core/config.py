@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     job_time_budget_seconds: int = 25
     job_max_attempts: int = 3
 
+    # Knowledge & documents (Phase 2 — chunking/retrieval defaults are safe)
+    knowledge_chunk_chars: int = 1200      # ≈ 300–400 tokens per chunk
+    knowledge_chunk_overlap: int = 150     # word-aligned overlap between chunks
+    knowledge_embed_batch: int = 32        # texts per embedder call
+    knowledge_top_k: int = 6               # default search depth
+    knowledge_max_upload_mb: int = 20      # per-file upload cap
+
     # Email (Resend — Phase 4+)
     resend_api_key: str = ""
     email_from: str = "CAIOS <noreply@example.com>"

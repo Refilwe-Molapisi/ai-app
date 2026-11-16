@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import psycopg
+from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 from psycopg_pool import PoolTimeout
@@ -72,7 +73,9 @@ class PostgresJobQueue:
         self._pool = ConnectionPool(
             settings.database_url, min_size=1, max_size=4, open=True,
             timeout=10,  # fail fast on cold starts; callers surface 503, never hang
-            kwargs={"autocommit": True},
+            # dict_row: handlers and endpoints read rows by column name
+            # (Job.from_row, counts(), …). Latent tuple-rows bug fixed in Phase 2.
+            kwargs={"autocommit": True, "row_factory": dict_row},
         )
 
     # -- write side -----------------------------------------------------------
