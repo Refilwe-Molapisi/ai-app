@@ -49,14 +49,15 @@ async def _handle_echo(job: Job) -> dict | None:
 def default_registry(queue: PostgresJobQueue | None = None) -> dict[str, Handler]:
     """Kind → handler map. Handlers receive the runner-owned queue so pipelines
     can chain follow-up jobs without opening extra pools. Specialist-agent
-    handlers (Phases 4–6) register here; nothing else in the codebase needs to
+    handlers (Phases 5–6) register here; nothing else in the codebase needs to
     know how a job is executed."""
     from app.knowledge.handlers import default_knowledge_handlers
+    from app.coordination.handlers import default_coordination_handlers
 
     registry: dict[str, Handler] = {
         "demo.echo": _handle_echo,
-        **default_knowledge_handlers(queue),   # Phase 2: knowledge.extract / knowledge.embed
-        # TODO(Phase 4): "assignment.step"    — workflow engine step executor
+        **default_knowledge_handlers(queue),     # Phase 2: knowledge.extract / knowledge.embed
+        **default_coordination_handlers(queue),  # Phase 4: assignment.step (workflow engine)
         # TODO(Phase 6): "report.generate"    — deliverable generation
     }
     return registry

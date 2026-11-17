@@ -583,5 +583,149 @@ $("#knowledge-chips").addEventListener("click",e=>{
 });
 renderKnowledge();
 </script>
+
+<script>
+/* ═══ Live-API layer (Phase 4) — real endpoints with graceful fallback ═════
+   Configure via URL or localStorage:  caios-ui.html?api=http://localhost:8000&org=company&token=dev
+   - no api configured   → synthetic demo data stays (badge: DEMO DATA)
+   - api unreachable     → demo data stays (badge: API UNREACHABLE)
+   - api reachable       → assignments, pipeline donut and AI spend render from
+                           GET /assignments + /ai/usage (badge: LIVE); rows
+                           awaiting approval expose a real Approve button and
+                           "New assignment" really starts a workflow.         */
+(function(){
+const qs=new URLSearchParams(location.search);
+const cfg={
+ base:(qs.get("api")||localStorage.getItem("caios_api_base")||"").replace(/\/+$/,""),
+ org:qs.get("org")||localStorage.getItem("caios_api_org")||"company",
+ token:qs.get("token")||localStorage.getItem("caios_api_token")||"dev"
+};
+if(qs.get("api")){["api","org","token"].forEach(k=>{const v=qs.get(k);
+ if(v)localStorage.setItem("caios_api_"+k,v);});}
+if(!cfg.base){badge("DEMO DATA","var(--text-muted)");return}
+
+const LPILL={running:["progress","RUNNING"],awaiting_approval:["pending","AWAITING APPROVAL"],
+ completed:["ok","COMPLETED"],cancelled:["muted","CANCELLED"],failed:["pending","FAILED"]};
+const LIVE={on:false};
+let liveRowsById={};
+
+function badge(txt,col){
+ let b=document.getElementById("api-badge");
+ if(!b){b=document.createElement("div");b.id="api-badge";document.body.appendChild(b);
+  b.style.cssText="position:fixed;bottom:14px;right:14px;z-index:99;font:600 10.5px Montserrat,sans-serif;"
+   +"letter-spacing:.08em;padding:6px 12px;border-radius:999px;border:1px solid var(--border);"
+   +"background:#fff;color:"+col+";box-shadow:0 2px 8px rgba(0,0,0,.08)";}
+ b.textContent=txt;b.style.color=col;}
+
+async function api(path,opts){
+ const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),4000);
+ const r=await fetch(cfg.base+path,{...opts,
+  headers:{...(cfg.token?{"Authorization":"Bearer "+cfg.token}:{}),
+           ...((opts&&opts.headers)||{})},signal:ctl.signal});
+ clearTimeout(t);
+ if(!r.ok)throw new Error(r.status+" "+path);
+ return r.json();}
+const rel=iso=>{if(!iso)return"—";const s=(Date.now()-new Date(iso))/1e3;
+ return s<90?"just now":s<3600?Math.round(s/60)+" min ago":
+ s<86400?Math.round(s/3600)+" h ago":Math.round(s/86400)+" d ago"};
+
+/* refresh the demo widgets from the live ASSIGNMENTS splice */
+function refreshWidgets(){
+ const dist={};ASSIGNMENTS.forEach(a=>dist[a.state]=(dist[a.state]||0)+1);
+ const groups=[["In review & approval",["AWAITING APPROVAL","APPROVED","QUALITY REVIEW","HUMAN REVIEW"],"var(--brand-green)"],
+  ["In progress",["RUNNING","PROCESSING","ANALYSIS COMPLETED","DRAFT DELIVERABLES","INFORMATION VALIDATED","INFORMATION RECEIVED","SCOPE CONFIRMED","CREATED"],"var(--brand-blue)"],
+  ["Completed",["COMPLETED","DELIVERED"],"var(--brand-dark)"],
+  ["Closed",["CANCELLED","FAILED","ARCHIVED"],"var(--brand-light)"]];
+ const total=ASSIGNMENTS.length||1;let acc=0,conic=[],legend="";
+ groups.forEach(([label,keys,col])=>{const n=keys.reduce((s,k)=>s+(dist[k]||0),0);
+  if(!n)return;const from=acc/total*100,to=(acc+n)/total*100;
+  conic.push(col+" "+from+"% "+to+"%");
+  legend+='<div class="k"><i style="background:'+col+'"></i>'+label+"<b>"+n+"</b></div>";acc+=n;});
+ $("#donut").style.background="conic-gradient("+(conic.join(",")||"var(--brand-light) 0 100%")+")";
+ $("#donut-total").textContent=ASSIGNMENTS.length;
+ $("#donut-legend").innerHTML=legend;
+ $("#tbl-dashboard tbody").innerHTML=ASSIGNMENTS.slice(0,6).map(a=>
+  "<tr><td class='cell-title'><b>"+a.name+'</b><span>'+a.code+"</span></td><td>"+a.client+
+  "</td><td>"+pill(a.state)+"</td></tr>").join("");
+ renderAssignments();}
+
+async function live(){
+ try{
+  await api("/health");
+  const [asg,usage]=await Promise.all([
+   api("/assignments?org_id="+encodeURIComponent(cfg.org)+"&limit=25"),
+   api("/ai/usage?org_id="+encodeURIComponent(cfg.org)+"&days=30")]);
+  liveRowsById={};
+  ASSIGNMENTS.splice(0,ASSIGNMENTS.length,...asg.assignments.map(a=>{
+   const st=LPILL[a.status]||["muted",a.status.toUpperCase()];
+   const row={code:a.id.slice(0,8).toUpperCase(),
+    name:a.title||a.workflow.replace(/^\w+\./,""),client:cfg.org,
+    state:st[1],updated:rel(a.updated_at||a.created_at)};
+   liveRowsById[row.code]=a;return row;}));
+  refreshWidgets();
+  const s=usage.totals,stat=$("#stats").children[3];
+  if(stat)stat.innerHTML='<div class="label">AI spend — last 30 d</div><div class="value">$'+
+   (s.estimated_cost_usd||0).toFixed(2)+'</div><div class="delta neutral">'+s.calls+
+   " model call"+(s.calls===1?"":"s")+(s.errors?(" · "+s.errors+" errored"):"")+"</div>";
+  badge("LIVE · "+cfg.base.replace(/^https?:\/\//,""),"var(--brand-green)");
+  LIVE.on=true;
+  toast("<b>Live mode</b> — real assignments from "+cfg.base);
+ }catch(e){
+  badge("API UNREACHABLE — DEMO DATA","var(--text-muted)");
+  toast("<b>API unreachable</b> — staying on demo data");
+ }
+}
+
+/* real "New assignment" through POST /assignments */
+$("#btn-new-assignment").addEventListener("click",async()=>{
+ if(!LIVE.on){toast("Configure <b>?api=</b> in the URL to start real assignments");return}
+ let flows;try{flows=(await api("/workflows")).workflows}catch(e){toast("Cannot load workflows: "+e.message);return}
+ const pick=prompt("Start which workflow?\n"+flows.map((w,i)=>(i+1)+". "+w.name).join("\n"),"1");
+ if(!pick)return;const wf=flows[Math.max(1,+pick||1)-1]||flows[0];
+ const raw=prompt("Inputs"+(wf.required_inputs.length?
+  " — "+wf.required_inputs.join(", ")+" (comma-separated)":" — none needed"),"");
+ if(raw===null)return;
+ const inputs={};wf.required_inputs.forEach((k,i)=>inputs[k]=(raw.split(",")[i]||"").trim());
+ try{
+  const created=await api("/assignments",{method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({org_id:cfg.org,workflow:wf.name,inputs})});
+  toast("<b>Assignment started</b> — "+created.id.slice(0,8)+" · "+created.status);
+  live();
+ }catch(e){toast("Start failed: "+e.message)}
+});
+
+/* live renderer: same filters/search as the demo, plus real Approve buttons */
+window.renderAssignments=function(){
+ const rows=ASSIGNMENTS.filter(a=>{
+  const inF=activeFilter==="All"||(chipMap[activeFilter]||[]).includes(a.state);
+  const hay=(a.name+" "+a.client+" "+a.code).toLowerCase();
+  return inF&&hay.includes(searchTerm);});
+ $("#tbl-assignments tbody").innerHTML=rows.length?rows.map(a=>{
+  const api_row=LIVE.on?liveRowsById[a.code]:null;
+  const gate=api_row&&api_row.status==="awaiting_approval";
+  const approve=gate?' <button data-approve="'+api_row.id+'" style="height:26px;padding:0 10px;'
+   +'font-size:11px;border:1px solid var(--border);border-radius:7px;background:#fff;'
+   +'cursor:pointer;font-family:Montserrat;font-weight:600;color:var(--brand-green)">Approve</button>':"";
+  return "<tr><td class='cell-title'><b>"+a.name+'</b><span>'+a.code+"</span></td><td>"+a.client+
+   "</td><td><span class='tagline'>"+a.code+"</span></td><td>"+pill(a.state)+
+   "</td><td style='color:var(--text-muted)'>"+a.updated+approve+"</td></tr>";}).join("")
+  :'<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:32px">No assignments match this filter.</td></tr>';
+};
+
+document.addEventListener("click",async e=>{
+ const id=e.target&&e.target.getAttribute&&e.target.getAttribute("data-approve");
+ if(!id)return;
+ try{
+  await api("/assignments/"+id+"/approve",{method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({org_id:cfg.org,note:"approved from UI prototype"})});
+  toast("<b>Approved</b> — workflow advanced");live();
+ }catch(err){toast("Approve failed: "+err.message)}
+});
+
+live();
+})();
+</script>
 </body>
 </html>

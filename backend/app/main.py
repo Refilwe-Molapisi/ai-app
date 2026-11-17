@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.api.routes import health, jobs, maintenance
 from app.knowledge.routes import router as knowledge_router
 from app.ai.routes import router as ai_router, prompt_router as ai_prompt_router
+from app.coordination.routes import router as coordination_router
 from app.jobs.queue import QueueUnavailable
 
 logging.basicConfig(
@@ -29,6 +30,7 @@ _SCHEMA_PATHS = {
     "jobs": Path(__file__).resolve().parent / "jobs" / "schema.sql",
     "knowledge": Path(__file__).resolve().parent / "knowledge" / "schema.sql",
     "ai": Path(__file__).resolve().parent / "ai" / "schema.sql",
+    "coordination": Path(__file__).resolve().parent / "coordination" / "schema.sql",
 }
 
 
@@ -60,9 +62,10 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="CAIOS API",
-        version="0.3.0",
+        version="0.4.0",
         description="Company AI Operations System — Phases 0–4 foundations, "
-                    "knowledge ingestion (Phase 2) and AI integration (Phase 3)",
+                    "knowledge ingestion (2), AI integration (3) and central "
+                    "coordination (4)",
         lifespan=lifespan,
     )
 
@@ -75,8 +78,10 @@ def create_app() -> FastAPI:
                             content={"detail": "job queue unavailable; retry shortly"})
 
     # CORS: explicit allow-list; never wildcard when credentials are involved.
+    # "null" covers the single-file UI prototype opened from file:// in dev —
+    # production origins are configured, never wildcards.
     allowed = [o for o in [
-        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:3000", "http://127.0.0.1:3000", "null",
     ] if not settings.is_production]
     app.add_middleware(
         CORSMiddleware,
@@ -91,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge_router)
     app.include_router(ai_router)
     app.include_router(ai_prompt_router)
+    app.include_router(coordination_router)
     return app
 
 

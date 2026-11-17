@@ -136,8 +136,8 @@ class BrokenModel:
     async def complete(self, *a, **k):
         raise RuntimeError("provider unreachable (simulated)")
 
-import app.ai.routes as airoutes  # noqa: E402
-airoutes._model = lambda: FakeModel()
+import app.ai.service as aiservice  # noqa: E402
+aiservice._model = lambda: FakeModel()
 
 # ── 5. Prompt management ─────────────────────────────────────────────────────
 r = client.post("/prompts", headers={"Authorization": "Bearer dev"}, json={
@@ -217,7 +217,7 @@ check("empty-org answer -> 200 ungrounded + hint", r.status_code == 200
       and "no chunks indexed" in (r.json()["retrieval"]["hint"] or ""), r.text[:250])
 
 # ── 9. Model failure path: 502 + ledger 'error' row ──────────────────────────
-airoutes._model = lambda: BrokenModel()
+aiservice._model = lambda: BrokenModel()
 r = client.post("/ai/answer", headers={"Authorization": "Bearer dev"}, json={
     "question": "Will this fail?", "org_id": "company",
 })
@@ -233,7 +233,7 @@ r = client.get("/ai/usage", headers={"Authorization": "Bearer dev"},
 check("org-empty ledger holds its own call",
       r.json()["totals"]["calls"] == 1 and r.json()["totals"]["errors"] == 0,
       str(r.json()["totals"]))
-airoutes._model = lambda: FakeModel()
+aiservice._model = lambda: FakeModel()
 
 # ── 10. Auth regression on AI routes ─────────────────────────────────────────
 r = client.post("/ai/answer", json={"question": "x", "org_id": "company"})

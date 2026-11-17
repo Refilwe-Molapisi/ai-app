@@ -3,10 +3,11 @@
 Working implementation of the CAIOS master specification (CAIOS-MASTER-001 v1.0),
 starting from the $0 hosting strategy (CAIOS-INFRA-001) and the approved brand
 identity. This repository covers the **Phases 0–4 foundations**, **Phase 2
-(knowledge & document ingestion)** and **Phase 3 (AI integration)**: documents
-upload → extraction → chunking → embeddings (pgvector) → org-scoped retrieval →
-grounded answers with citations, with versioned prompt templates and a full
-AI usage ledger.
+(knowledge & document ingestion)**, **Phase 3 (AI integration)** and **Phase 4
+(central coordination)**: documents upload → extraction → chunking → embeddings
+(pgvector) → org-scoped retrieval → grounded answers with citations, with
+versioned prompt templates, a full AI usage ledger, and an assignment/workflow
+engine with human approval gates and an append-only governance trail.
 
 **Status: synthetic data only.** No client-confidential information may enter
 any component until the critical validations (TV-011/012/013/020/023) pass and
@@ -23,7 +24,8 @@ caios/
 │   ├── 02-design-system.md          ← tokens extracted from brand + UI direction (CAIOS-DESIGN-001)
 │   ├── 03-adr-and-validation-updates.md ← ADR-001 closed, ADR-009/012/014, TV register changes
 │   ├── 04-phase2-knowledge.md       ← Phase 2 implementation notes (CAIOS-KNOW-001)
-│   └── 05-phase3-ai.md              ← Phase 3 implementation notes (CAIOS-AI-001)
+│   ├── 05-phase3-ai.md              ← Phase 3 implementation notes (CAIOS-AI-001)
+│   └── 06-phase4-coordination.md    ← Phase 4 implementation notes (CAIOS-COORD-001)
 ├── infra/
 │   ├── docker-compose.yml           ← Layer 1: local stack (API + worker + Postgres/pgvector)
 │   ├── render.yaml                  ← Layer 2: Render free blueprint
@@ -39,12 +41,13 @@ caios/
 │   ├── app/adapters/storage_adapter.py    ← S3-compatible storage (Z1/R2), client-keyed
 │   ├── app/jobs/                    ← portable Postgres job queue + bounded runner (ADR-009)
 │   ├── app/knowledge/               ← Phase 2: schema, extraction, chunking, handlers, routes
-│   ├── app/ai/                      ← Phase 3: prompts (versioned), answer loop, usage ledger
-│   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts
+│   ├── app/ai/                      ← Phase 3: prompts (versioned), answer loop (service), usage ledger
+│   ├── app/coordination/            ← Phase 4: workflow registry, assignments, engine, gates, events
+│   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows
 │   ├── tests/                       ← unit tests + real-Postgres integration harness
 │   └── Dockerfile                   ← same image for local, Render and the future VPS
 └── prototype/
-    └── caios-ui.html                ← single-file UI prototype (brand palette + typography)
+    └── caios-ui.html                ← single-file UI prototype; live-API layer (LIVE/DEMO badges)
 ```
 
 ## Quick start (Layer 1 — local, cost R0)
@@ -102,7 +105,29 @@ curl -X POST localhost:8000/prompts/<id>/versions ...   # new version becomes ac
 curl 'localhost:8000/ai/usage?org_id=org-a&days=30' -H 'Authorization: Bearer dev'
 ```
 
-Open `prototype/caios-ui.html` in a browser for the interface direction.
+### Phase 4: start a governed assignment (dev mode)
+
+```bash
+# what can be started, and what each workflow needs
+curl localhost:8000/workflows -H 'Authorization: Bearer dev'
+
+# start one: steps are materialised concretely, first step enqueued as a queue job
+curl -X POST localhost:8000/assignments -H 'Authorization: Bearer dev' \
+     -H 'Content-Type: application/json' \
+     -d '{"org_id":"org-a","workflow":"company.knowledge-brief","inputs":{"topic":"VAT registration"}}'
+# → 201 {"id":"…", "status":"running", "steps":[{seq:1, status:"queued", …},{seq:2, is_gate:true}]}
+
+curl -X POST localhost:8000/jobs/run -H 'X-Job-Secret: change-me-local'   # tick: brief step executes
+# assignment → awaiting_approval; approve consumes the gate and completes the workflow
+curl -X POST localhost:8000/assignments/<id>/approve -H 'Authorization: Bearer dev' \
+     -H 'Content-Type: application/json' -d '{"org_id":"org-a","note":"looks right"}'
+curl 'localhost:8000/assignments/<id>?org_id=org-a' -H 'Authorization: Bearer dev'  # steps + event trail
+```
+
+Open `prototype/caios-ui.html?api=http://localhost:8000&org=org-a&token=dev`
+in a browser: the prototype renders live assignments with a **LIVE** badge,
+real approve buttons and a working *New assignment* flow; without an API it
+stays on clearly-badged synthetic demo data.
 
 ## Layer 2 deployment (demo/staging, cost R0)
 
@@ -118,7 +143,7 @@ The first successful backup + restore test closes TV-020.
 | 1 — Core foundation | Backend skeleton, config, auth verification, health, Docker — **done** |
 | 2 — Knowledge & documents | Upload → extraction (pdf/docx/html/text) → chunking → embeddings (pgvector) → org-scoped semantic search; `knowledge.*` handlers in the runner; TV-019 re-index flow — **done** (see docs/04) |
 | 3 — AI integration | Grounded answer loop (`/ai/answer`: retrieval → template → model → citations); versioned prompt management (`/prompts`); §20 usage ledger incl. failure rows (`/ai/usage`) — **done** (see docs/05) |
-| 4 — Central coordination | Queue + runner + workflow states defined; assignment engine — **skeleton only** |
+| 4 — Central coordination | Declarative workflow registry; assignments with ordered steps (queue-executed + human gates); `/assignments` + `/workflows` + approve/cancel; append-only event trail; UI prototype live-API layer — **done** (see docs/06) |
 | 5–10 | Not started (agents, deliverables, QA governance, internal ops, deployment, continuous dev) |
 
 ## Verification already performed
@@ -135,11 +160,20 @@ PostgreSQL 16 + pgvector (user-space via `pgserver`, or any `DATABASE_URL`):
   integration `tests/integration_phase3.py` **24/24** (prompt lifecycle with
   409/422 paths, grounded answer with citations + prompt version, ledger rows
   incl. simulated model failure, org-scoped ledgers, ungrounded hint path).
-- **API smoke** (`scripts/smoke_backend.py`, no DB): all 17 routes in OpenAPI,
-  auth fail-closed on upload/search/answer/prompts/usage — **13/13**.
-- Phase 2 suites re-run after Phase 3 wiring: ALL PASS (no regressions).
-- UI prototype rendered and screenshot-verified in headless Chromium: all three
-  views, fonts, charts, pills and filters behave; no console errors.
+- **Phase 4** — unit `tests/test_phase4.py` **25/25** (registry self-validation
+  and rejection matrix, pure planning incl. template-input mismatches,
+  executor/registry agreement, DB-free 422s); integration
+  `tests/integration_phase4.py` **28/28** (full knowledge-brief lifecycle over
+  the public API with a real queue job and §20 ledger row, gate approve →
+  completed, cancel path, honest fail-fast on an empty org, cross-org 404,
+  status filters).
+- **API smoke** (`scripts/smoke_backend.py`, no DB): all 22 routes in OpenAPI,
+  auth fail-closed on upload/search/answer/prompts/usage/assignments —
+  **16/16**.
+- Phase 2 + 3 suites re-run after Phase 4 wiring: ALL PASS (no regressions).
+- UI prototype verified in headless Chromium in both modes: demo fallback
+  (DEMO DATA badge) and live-API mode against a real API + Postgres (LIVE
+  badge, real rows, live AI-spend stat); no console errors.
 
 The real-database integration harness caught and fixed a latent Phase 0–4 bug:
 psycopg3 returns tuple rows unless `row_factory=dict_row` is pinned on the
@@ -161,4 +195,9 @@ pool — invisible to every 503-path smoke test, fatal on a live queue.
   mix vector spaces — an ungrounded answer says so, twice (flag + prose rule).
 - Prompt behaviour changes are versioned events (`/prompts/{id}/versions`),
   never silent edits (§8.3).
+- Workflow steps are planned concretely at creation (bad inputs are 422s,
+  never runtime surprises) and fail fast: a step error fails the assignment
+  with the error preserved, and retried jobs exit as no-op skips (§11).
+- Every assignment transition is an append-only event row with actor and
+  detail — the §13 trail is the audit, not a log file.
 - Everything is containerised: Render → Contabo is a data migration, not a rewrite.

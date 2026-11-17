@@ -7,15 +7,14 @@
     GET  /prompts/{id}    prompt detail incl. all versions
     POST /prompts/{id}/versions  append + activate a new version (deliberate change)
 
-The answer loop is a direct composition of the Phase 2 knowledge store and
-the Phase 0–4 model adapter: retrieval is org-scoped (TV-012), templates are
-versioned (§8.3), and EVERY model call writes a §20 ledger row — including
-failures. Heavy/off-peak bulk generation stays on the job queue (Phase 6);
-this endpoint answers a single question inside the HTTP budget.
+The answer loop itself lives in app/ai/service.py so the Phase 4 workflow
+engine executes the exact same governed path; this module adds auth, the
+client-org constraint and HTTP error mapping. Heavy/off-peak bulk generation
+stays on the job queue (Phase 6); /ai/answer answers a single question inside
+the HTTP budget.
 """
 
 import logging
-import time
 import uuid
 from typing import Annotated
 
@@ -23,15 +22,11 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.adapters.model_adapter import ModelResult
+from app.ai.prompts import InvalidTemplate, validate_template
+from app.ai.service import ModelCallError, grounded_answer
 from app.api.deps import get_current_principal
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.core.security import Principal
-from app.ai.prompts import (
-    DEFAULT_PROMPT_NAME, InvalidTemplate, default_template, format_context,
-    render, validate_template,
-)
-from app.knowledge.store import KnowledgeStore
 
 logger = logging.getLogger("caios.ai")
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -41,12 +36,6 @@ prompt_router = APIRouter(prefix="/prompts", tags=["prompts"])
 def _ai_store():
     from app.ai.store import AIStore
     return AIStore(get_settings())
-
-
-def _model():
-    """Model resolution point — tests substitute here (no key needed)."""
-    from app.adapters.model_adapter import get_model_adapter
-    return get_model_adapter(get_settings())
 
 
 class AnswerRequest(BaseModel):
@@ -80,114 +69,26 @@ async def answer(
     base contributed nothing (empty index OR index built with a different
     embedder — never mix vector spaces), and the default template instructs
     the model to admit when the answer is not in the documents."""
-    settings = get_settings()
     org_id = body.org_id.strip()
     if principal.client_org_id and principal.client_org_id != org_id:
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "queries are restricted to the caller's client organisation")
-
-    # 1. Retrieve — org-scoped, embedder-pinned (Phase 2 store enforces both).
-    from app.adapters.embedding_adapter import get_embedding_adapter
-    from app.knowledge.store import to_pgvector
     try:
-        embedder = get_embedding_adapter(settings)
-        embedded = await embedder.embed([body.question])
-    except RuntimeError as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-
-    knowledge = KnowledgeStore(settings)
-    try:
-        hits = knowledge.search(
-            org_id=org_id, query_vector=to_pgvector(embedded.vectors[0]),
-            provider=embedded.provider, model=embedded.model,
-            dimensions=embedded.dimensions,
-            top_k=body.top_k or settings.knowledge_top_k,
-            engagement_id=body.engagement_id,
+        return await grounded_answer(
+            question=body.question, org_id=org_id,
+            principal_label=principal.subject,
+            top_k=body.top_k, engagement_id=body.engagement_id,
         )
-        index_stats = knowledge.stats(org_id)
-    finally:
-        knowledge.close()
-    grounded = bool(hits)
-
-    # 2. Render the active template (org version if it exists, default otherwise).
-    ai = _ai_store()
-    try:
-        active = ai.get_active_prompt(org_id=org_id, name=DEFAULT_PROMPT_NAME)
-        template = active or default_template().__dict__
-        try:
-            system = render(template["body"], format_context(hits))
-        except InvalidTemplate as exc:  # a stored template failing validation = operator error
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                f"active prompt template is invalid: {exc}") from exc
-
-        # 3. Call the model — one question, one answer, ledger row either way.
-        started = time.monotonic()
-        try:
-            result: ModelResult = await _model().complete(
-                [{"role": "user", "content": body.question}],
-                system=system,
-                temperature=settings.ai_answer_temperature,
-                max_tokens=settings.ai_max_answer_tokens,
-            )
-            ai.record_usage(
-                org_id=org_id, principal=principal.subject, purpose="answer",
-                provider=result.provider, model=result.model,
-                input_tokens=result.input_tokens, output_tokens=result.output_tokens,
-                cached_tokens=result.cached_tokens,
-                duration_ms=int((time.monotonic() - started) * 1000),
-                estimated_cost_usd=result.estimated_cost_usd,
-                status="ok", detail=body.question[:200],
-            )
-        except Exception as exc:  # noqa: BLE001 — §20: failed calls are ledger events too
-            ai.record_usage(
-                org_id=org_id, principal=principal.subject, purpose="answer",
-                provider=getattr(_safe_adapter_probe(), "provider_name", "unknown"),
-                model="unknown",
-                duration_ms=int((time.monotonic() - started) * 1000),
-                estimated_cost_usd=0.0, status="error",
-                detail=f"{type(exc).__name__}: {exc}",
-            )
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
-                                "model call failed; the error was recorded in the usage ledger") from exc
-    finally:
-        ai.close()
-
-    return {
-        "answer": result.text,
-        "grounded": grounded,
-        "citations": [
-            {"document_id": h["document_id"], "title": h["title"], "seq": h["seq"],
-             "distance": h["distance"]}
-            for h in hits
-        ],
-        "prompt": {"name": template["name"], "version": template.get("version")},
-        "retrieval": {
-            "embedder": {"provider": embedded.provider, "model": embedded.model,
-                         "dimensions": embedded.dimensions},
-            "chunks_in_index": index_stats["chunks"],
-            "hint": None if grounded else (
-                "no chunks indexed for this org yet" if not index_stats["chunks"]
-                else "index was built with a different embedder — re-index documents (TV-019)"),
-        },
-        "usage": {
-            "provider": result.provider, "model": result.model,
-            "input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
-            "estimated_cost_usd": result.estimated_cost_usd,
-            "duration_seconds": result.duration_seconds,
-        },
-    }
-
-
-class _AdapterProbe:
-    provider_name = "unknown"
-
-
-def _safe_adapter_probe() -> _AdapterProbe:
-    try:
-        from app.adapters.model_adapter import get_model_adapter
-        return get_model_adapter(get_settings())
-    except Exception:  # noqa: BLE001 — probing must never mask the original error
-        return _AdapterProbe()
+    except ModelCallError as exc:
+        # Reaching the provider failed — ledger row already written (§20).
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            "model call failed; the error was recorded in the usage ledger") from exc
+    except RuntimeError as exc:
+        # Model/embedder provider not configured — clean 503, no ledger row
+        # (a configuration gap is not a model call).
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ValueError as exc:  # invalid stored template = operator error, loudly
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc)) from exc
 
 
 @router.get("/usage")
