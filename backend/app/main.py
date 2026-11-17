@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.api.routes import health, jobs, maintenance
 from app.knowledge.routes import router as knowledge_router
+from app.ai.routes import router as ai_router, prompt_router as ai_prompt_router
 from app.jobs.queue import QueueUnavailable
 
 logging.basicConfig(
@@ -27,6 +28,7 @@ logger = logging.getLogger("caios")
 _SCHEMA_PATHS = {
     "jobs": Path(__file__).resolve().parent / "jobs" / "schema.sql",
     "knowledge": Path(__file__).resolve().parent / "knowledge" / "schema.sql",
+    "ai": Path(__file__).resolve().parent / "ai" / "schema.sql",
 }
 
 
@@ -58,9 +60,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="CAIOS API",
-        version="0.2.0",
-        description="Company AI Operations System — Phases 0–4 foundations "
-                    "+ Phase 2 knowledge & document ingestion (§7, §9)",
+        version="0.3.0",
+        description="Company AI Operations System — Phases 0–4 foundations, "
+                    "knowledge ingestion (Phase 2) and AI integration (Phase 3)",
         lifespan=lifespan,
     )
 
@@ -87,6 +89,8 @@ def create_app() -> FastAPI:
     app.include_router(jobs.router)
     app.include_router(maintenance.router)
     app.include_router(knowledge_router)
+    app.include_router(ai_router)
+    app.include_router(ai_prompt_router)
     return app
 
 

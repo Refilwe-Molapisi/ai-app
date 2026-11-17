@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     knowledge_top_k: int = 6               # default search depth
     knowledge_max_upload_mb: int = 20      # per-file upload cap
 
+    # AI answering (Phase 3 — §8, §20)
+    ai_answer_temperature: float = 0.2
+    ai_max_answer_tokens: int = 1024
+
     # Email (Resend — Phase 4+)
     resend_api_key: str = ""
     email_from: str = "CAIOS <noreply@example.com>"
