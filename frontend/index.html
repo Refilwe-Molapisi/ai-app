@@ -250,6 +250,9 @@ th.num{text-align:right}
     <button class="nav-item" data-view="knowledge">
       <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
       Knowledge</button>
+    <button class="nav-item" data-view="deliverables">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6M9 9h2"/></svg>
+      Deliverables</button>
 
     <div class="nav-label">Service divisions</div>
     <button class="nav-item" data-view="agents">
@@ -383,6 +386,35 @@ th.num{text-align:right}
         </div>
       </section>
 
+      <!-- ── Deliverables ─────────────────────────────────────────────── -->
+      <section class="view" id="view-deliverables" aria-label="Deliverables">
+        <div class="row-between">
+          <div>
+            <h1 class="page-title">Deliverables</h1>
+            <p class="page-sub">Generated client artefacts — briefs (.md), reports (.docx/.pdf) and workbooks (.xlsx) rendered from a governed spec, stored server-side, downloadable through the authorised API.</p>
+          </div>
+          <button class="btn btn-primary" id="dl-new">+ New deliverable</button>
+        </div>
+        <div class="errbox" id="dl-err"></div>
+        <div class="grid-main">
+          <div class="card">
+            <h2>Artefacts</h2>
+            <div class="card-sub" id="dl-list-sub">Generation runs on the queue; refresh to update status.</div>
+            <div class="table-wrap" id="dl-table"></div>
+          </div>
+          <div class="card">
+            <h2>How generation stays governed</h2>
+            <div class="feed">
+              <div class="feed-item"><p><span class="evt">deterministic</span> — the spec renders identically every time; no hidden model calls. AI content enters via the spec and was already ledgered (§20).</p></div>
+              <div class="feed-item"><p><span class="evt">provenance footer</span> — every artefact carries CAIOS, UTC time and a verify-before-external-use note.</p></div>
+              <div class="feed-item"><p><span class="evt">event trail</span> — created → generating → ready (or failed, with the honest reason) on an append-only log.</p></div>
+              <div class="feed-item"><p><span class="evt">private storage</span> — bytes sit server-side; downloads stream through the authorised API, never public URLs.</p></div>
+              <div class="feed-item"><p><span class="evt">injection guard</span> — spreadsheet cells that start like formulas are stored as text, never executed.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Agents ───────────────────────────────────────────────────── -->
       <section class="view" id="view-agents" aria-label="Specialist agents">
         <h1 class="page-title">Specialist agents</h1>
@@ -502,6 +534,36 @@ th.num{text-align:right}
   </div>
 </div>
 
+<!-- ── New deliverable modal ────────────────────────────────────────────── -->
+<div class="overlay" id="modal-dl" role="dialog" aria-modal="true" aria-labelledby="md-title">
+  <div class="modal">
+    <h2 id="md-title">New deliverable</h2>
+    <p class="page-sub" style="margin-bottom:16px">A deterministic spec → queue → artefact. No hidden model calls.</p>
+    <form id="dl-form">
+      <div class="field"><label for="dl-title">Title</label><input type="text" id="dl-title" maxlength="200" required placeholder="e.g. Q3 Variance Analysis"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label for="dl-kind">Format</label>
+          <select id="dl-kind"><option value="md">Markdown brief (.md)</option><option value="docx">Word report (.docx)</option><option value="xlsx">Excel workbook (.xlsx)</option><option value="pdf">PDF report (.pdf)</option></select></div>
+        <div class="field"><label for="dl-scope">Scope</label>
+          <select id="dl-scope"><option value="company">company</option><option value="client">client (engagement)</option></select></div>
+      </div>
+      <div class="field"><label for="dl-eng">Engagement ID (client scope)</label><input type="text" id="dl-eng" maxlength="120" placeholder="e.g. eng-acme-2026"></div>
+      <div class="field"><label for="dl-pf">Prepared for (optional)</label><input type="text" id="dl-pf" maxlength="200"></div>
+      <div class="field"><label>Sections</label></div>
+      <div id="dl-secs"></div>
+      <button class="btn btn-secondary" type="button" id="dl-add-sec" style="margin:4px 0 14px">+ Add section</button>
+      <div class="field"><label>Data table (optional — required for .xlsx content)</label></div>
+      <div class="field"><input type="text" id="dl-t-title" maxlength="120" placeholder="Table title, e.g. Revenue by line"></div>
+      <div class="field"><input type="text" id="dl-t-cols" placeholder="Columns, comma-separated, e.g. Line, Q2, Q3, Var"></div>
+      <div class="field"><textarea id="dl-t-rows" placeholder="One row per line, cells comma-separated, e.g.&#10;Product sales, 1200, 1350, +12.5%&#10;Services, 400, 390, -2.5%"></textarea></div>
+      <div class="actions">
+        <button class="btn btn-secondary" type="button" id="dl-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="dl-submit">Queue generation</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast" id="toast" aria-live="polite"></div>
 
 <script>
@@ -547,7 +609,7 @@ async function api(path,opts={}){
 
 /* ── State ────────────────────────────────────────────────────────────── */
 const S={live:false,agentsOnline:0,filter:'all',assignments:[],workflows:[],agents:[],
-  usage:null,docs:[],kbstats:null};
+  usage:null,docs:[],kbstats:null,deliverables:[],lastAnswer:null};
 
 /* ── Toast ────────────────────────────────────────────────────────────── */
 let toastT=null;
@@ -620,14 +682,24 @@ const DEMO={
      events:[{event:'assignment.created',actor:'ui',at:'2026-11-16T15:30:00Z'},{event:'step.failed',actor:'worker',at:'2026-11-16T15:31:12Z'}]}],
   usage:{totals:{calls:47,errors:1,input_tokens:112400,output_tokens:9860,cached_tokens:21400,estimated_cost_usd:0.0942,duration_ms:96400},
          by_model:[{model:'deepseek-chat',calls:41,input_tokens:98800,output_tokens:8120,estimated_cost_usd:0.0781},
-                   {model:'demo-embed',calls:6,input_tokens:13600,output_tokens:1740,estimated_cost_usd:0.0161}]}
+                   {model:'demo-embed',calls:6,input_tokens:13600,output_tokens:1740,estimated_cost_usd:0.0161}]},
+  deliverables:[
+    {id:'e1a2b3c4-0000-4000-8000-000000000001',title:'Q3 Variance Workbook',kind:'xlsx',scope:'company',org_id:'company',
+     status:'ready',mime_type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+     size_bytes:5950,checksum_sha256:'3f9c1a2b…demo',created_by:'ui',created_at:'2026-11-18T08:40:00Z',updated_at:'2026-11-18T08:40:09Z'},
+    {id:'e1a2b3c4-0000-4000-8000-000000000002',title:'VAT brief — AI export',kind:'md',scope:'company',org_id:'company',
+     status:'ready',mime_type:'text/markdown',size_bytes:1187,checksum_sha256:'b2d84e10…demo',
+     created_by:'ai-console',created_at:'2026-11-17T15:22:00Z',updated_at:'2026-11-17T15:22:04Z'},
+    {id:'e1a2b3c4-0000-4000-8000-000000000003',title:'Field review report',kind:'docx',scope:'client',org_id:'company',engagement_id:'eng-acme-2026',
+     status:'generating',mime_type:null,size_bytes:null,checksum_sha256:null,created_by:'ui',
+     created_at:'2026-11-18T09:12:00Z',updated_at:'2026-11-18T09:12:05Z'}]
 };
 
 /* ── Loaders ──────────────────────────────────────────────────────────── */
 async function loadAll(){
   err('#ov-err',0);err('#asg-err',0);err('#ag-err',0);err('#wf-err',0);err('#us-err',0);err('#kb-err',0);
   const jobs=[
-    loadAssignments(),loadWorkflows(),loadAgents(),loadUsage(),loadDocs()];
+    loadAssignments(),loadWorkflows(),loadAgents(),loadUsage(),loadDocs(),loadDeliverables()];
   await Promise.allSettled(jobs);
   renderBadge();route(true);
 }
@@ -654,6 +726,11 @@ async function loadDocs(){
   S.docs=j.documents||[];
   try{S.kbstats=await api('/knowledge/stats?org_id='+encodeURIComponent(CFG.org));}catch(e){S.kbstats=null;}
 }
+async function loadDeliverables(){
+  if(!S.live){S.deliverables=DEMO.deliverables;return;}
+  const j=await api('/deliverables?org_id='+encodeURIComponent(CFG.org)+'&limit=50');
+  S.deliverables=j.deliverables||[];
+}
 /* ── Badge / chips ────────────────────────────────────────────────────── */
 function setLive(t){$('#live-label').textContent=t;}
 function renderBadge(){
@@ -671,16 +748,18 @@ const PILL={running:['progress','RUNNING'],awaiting_approval:['pending','AWAITIN
   completed:['ok','COMPLETED'],cancelled:['muted','CANCELLED'],failed:['error','FAILED'],
   queued:['muted','QUEUED'],pending:['muted','PENDING'],done:['ok','DONE'],
   skipped:['muted','SKIPPED'],extracting:['progress','EXTRACTING'],indexed:['ok','INDEXED'],
-  failed_doc:['error','FAILED'],extracted:['progress','EXTRACTED'],uploaded:['muted','UPLOADED']};
+  failed_doc:['error','FAILED'],extracted:['progress','EXTRACTED'],uploaded:['muted','UPLOADED'],
+  generating:['progress','GENERATING'],ready:['ok','READY']};
 const pill=(st,extra)=>{const m=PILL[st]||['muted',String(st||'—').toUpperCase()];
   return '<span class="pill '+m[0]+'">'+esc(extra||m[1])+'</span>';};
 
 /* ── Router ───────────────────────────────────────────────────────────── */
 const CRUMB={overview:'Overview',assignments:'Assignments',assignment:'Assignment detail',
-  knowledge:'Knowledge base',agents:'Specialist agents',ai:'AI console',
-  usage:'Usage & spend',workflows:'Workflows',connection:'Connection'};
+  knowledge:'Knowledge base',deliverables:'Deliverables',agents:'Specialist agents',
+  ai:'AI console',usage:'Usage & spend',workflows:'Workflows',connection:'Connection'};
 const RENDER={overview:renderOverview,assignments:renderAssignments,knowledge:renderKnowledge,
-  agents:renderAgents,usage:renderUsage,workflows:renderWorkflows,connection:renderConnection};
+  deliverables:renderDeliverables,agents:renderAgents,usage:renderUsage,
+  workflows:renderWorkflows,connection:renderConnection};
 function route(silent){
   const h=location.hash.replace(/^#\/?/,'');const seg=h.split('/');
   const view=seg[0]||'overview';
@@ -885,6 +964,114 @@ function renderWorkflows(){
     '<div class="card"><div class="empty">Workflow registry unavailable</div></div>';
 }
 
+/* ── Deliverables ─────────────────────────────────────────────────────── */
+function renderDeliverables(){
+  const rows=S.deliverables;
+  $('#dl-list-sub').textContent=rows.length+' artefacts · org '+esc(CFG.org);
+  $('#dl-table').innerHTML=rows.length?
+    '<table><thead><tr><th>Deliverable</th><th>Format</th><th>Status</th><th class="num">Size</th><th>Updated</th><th></th></tr></thead><tbody>'+
+    rows.map(d=>'<tr><td class="cell-title"><b>'+esc(d.title)+'</b><span>'+
+      esc(String(d.id).slice(0,8).toUpperCase())+(d.engagement_id?' · '+esc(d.engagement_id):'')+
+      ' · by '+esc(d.created_by||'ui')+'</span></td>'+
+      '<td><span class="pill muted">'+esc(String(d.kind||'').toUpperCase())+'</span></td>'+
+      '<td>'+pill(d.status)+'</td>'+
+      '<td class="num">'+(d.size_bytes!=null?(Math.round(d.size_bytes/102.4)/10)+' kB':'—')+'</td>'+
+      '<td>'+esc(rel(d.updated_at||d.created_at))+'</td>'+
+      '<td>'+(d.status==='ready'?'<button class="btn btn-secondary" data-dldl="'+esc(d.id)+
+        '" data-kind="'+esc(d.kind)+'" data-title="'+esc(d.title)+'">Download</button>'
+        :(d.last_error?'<span class="hint" title="'+esc(d.last_error)+'">failed</span>':''))+
+      '</td></tr>').join('')+'</tbody></table>'
+    :'<div class="empty">No deliverables yet — create one or export an AI answer.</div>';
+}
+async function dlDownload(id,kind,title){
+  if(!S.live)return demoGuard();
+  try{const res=await fetch(CFG.base.replace(/\/+$/,'')+'/deliverables/'+encodeURIComponent(id)+
+        '/download?org_id='+encodeURIComponent(CFG.org),
+        {headers:{Authorization:'Bearer '+(CFG.token||'')}});
+    if(!res.ok){let d='';try{d=await res.text();}catch(e){}
+      throw new Error(res.status+' — '+String(d).slice(0,140));}
+    const blob=await res.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=(title||'deliverable')+'.'+(kind||'bin');
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('<b>Download started</b> — '+esc(title)+'.'+esc(kind));
+  }catch(e){toast('<b>Download failed</b> — '+esc(e.message));}
+}
+function dlAddSection(){
+  const div=document.createElement('div');
+  div.className='dl-sec';
+  div.style.cssText='border:1px solid var(--border);border-radius:var(--r-btn);padding:12px;margin-bottom:10px';
+  div.innerHTML='<div class="field" style="margin-bottom:8px"><input type="text" data-sec-h maxlength="200" placeholder="Section heading"></div>'+
+    '<div class="field" style="margin-bottom:8px"><textarea data-sec-b maxlength="20000" placeholder="Body — blank line starts a new paragraph"></textarea></div>'+
+    '<div class="field" style="margin-bottom:0"><input type="text" data-sec-l placeholder="Bullets, comma-separated (optional)"></div>'+
+    '<button type="button" class="btn btn-danger" data-sec-del style="min-height:30px;padding:0 10px;font-size:12px;margin-top:6px">Remove section</button>';
+  $('#dl-secs').appendChild(div);
+}
+function openDlModal(){
+  if(!S.live)return demoGuard();
+  $('#dl-title').value='';$('#dl-pf').value='';$('#dl-eng').value='';
+  $('#dl-t-title').value='';$('#dl-t-cols').value='';$('#dl-t-rows').value='';
+  $('#dl-secs').innerHTML='';dlAddSection();
+  $('#modal-dl').classList.add('show');$('#dl-title').focus();
+}
+$('#dl-new').addEventListener('click',openDlModal);
+$('#dl-add-sec').addEventListener('click',dlAddSection);
+$('#dl-cancel').addEventListener('click',()=>$('#modal-dl').classList.remove('show'));
+$('#dl-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!S.live)return demoGuard();
+  const sections=$$('#dl-secs .dl-sec').map(sec=>({
+    heading:sec.querySelector('[data-sec-h]').value.trim(),
+    body:sec.querySelector('[data-sec-b]').value.trim(),
+    bullets:sec.querySelector('[data-sec-l]').value.split(',').map(s=>s.trim()).filter(Boolean),
+  })).filter(s=>s.heading||s.body||s.bullets.length);
+  const cols=$('#dl-t-cols').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const rows=$('#dl-t-rows').value.split('\n').map(l=>l.trim()).filter(Boolean)
+    .map(l=>l.split(',').map(c=>c.trim()));
+  const tables=(cols.length&&rows.length&&rows.every(r=>r.length===cols.length))?
+    [{title:$('#dl-t-title').value.trim()||'Data',columns:cols,rows:rows}]:[];
+  if(!sections.length&&!tables.length)
+    return toast('<b>Nothing to render</b> — add a section or a table.');
+  if(cols.length&&!tables.length)
+    return toast('<b>Table rows must match columns</b> — same number of comma-separated cells per line.');
+  const spec={meta:{},sections,tables};
+  if($('#dl-pf').value.trim())spec.meta.prepared_for=$('#dl-pf').value.trim();
+  const body={org_id:CFG.org,title:$('#dl-title').value.trim(),kind:$('#dl-kind').value,
+    scope:$('#dl-scope').value,spec};
+  if($('#dl-scope').value==='client'){const eng=$('#dl-eng').value.trim();
+    if(!eng)return toast('<b>Engagement ID required</b> for client scope.');
+    body.engagement_id=eng;}
+  $('#dl-submit').disabled=true;
+  try{await api('/deliverables',{method:'POST',body:JSON.stringify(body)});
+    $('#modal-dl').classList.remove('show');
+    toast('<b>Queued</b> — report.generate renders it on the next queue tick.');
+    await loadDeliverables();renderDeliverables();
+    setTimeout(()=>{loadDeliverables().then(()=>{
+      if(location.hash.includes('deliverables'))renderDeliverables();});},2500);
+  }catch(ex){toast('<b>Creation failed</b> — '+esc(ex.message));}
+  $('#dl-submit').disabled=false;
+});
+async function exportAnswer(){
+  const la=S.lastAnswer;
+  if(!la||!S.live)return demoGuard();
+  const spec={meta:{prepared_for:CFG.org,author:'CAIOS AI console',
+      period:new Date().toISOString().slice(0,10)},
+    sections:[
+      {heading:'Question',body:la.question,bullets:[]},
+      {heading:'Answer',body:la.answer,bullets:[]},
+      {heading:'Citations',body:'',bullets:la.citations.map((c,i)=>'['+
+        (c.seq!=null?c.seq:i+1)+'] '+(c.title||c.document_id||'source')+
+        (c.distance!=null?' · distance '+Number(c.distance).toFixed(3):''))}],
+    tables:[]};
+  try{await api('/deliverables',{method:'POST',body:JSON.stringify({
+      org_id:CFG.org,title:'AI brief — '+la.question.slice(0,80),kind:'md',scope:'company',spec})});
+    toast('<b>Exported</b> — queued as a Markdown deliverable.');
+    await loadDeliverables();
+  }catch(ex){toast('<b>Export failed</b> — '+esc(ex.message));}
+}
+
 /* ── Connection ───────────────────────────────────────────────────────── */
 function renderConnection(){
   $('#cn-status').innerHTML=S.live?
@@ -979,7 +1166,10 @@ $('#ai-form').addEventListener('submit',async e=>{
       (cs.length?'<div class="citations">'+cs.map(c=>'<div class="cite"><b>['+(c.seq!=null?c.seq:'·')+'] '+
         esc(c.title||c.document_id||'')+'</b>'+(c.distance!=null?' · distance '+Number(c.distance).toFixed(3):'')+
         '</div>').join('')+'</div>':'')+
-      (j.retrieval&&j.retrieval.hint?'<p class="hint" style="margin-top:10px">'+esc(j.retrieval.hint)+'</p>':'');
+      (j.retrieval&&j.retrieval.hint?'<p class="hint" style="margin-top:10px">'+esc(j.retrieval.hint)+'</p>':'')+
+      '<div class="actions" style="justify-content:flex-start;margin-top:14px">'+
+      '<button class="btn btn-secondary" id="ai-export">Export as deliverable (.md)</button></div>';
+    S.lastAnswer={question:q,answer:j.answer||'',citations:j.citations||[]};
   }catch(ex){box.innerHTML='<div class="errbox show">'+esc(ex.message)+'</div>';}
   $('#ai-btn').disabled=false;
 });
@@ -1012,10 +1202,16 @@ document.addEventListener('click',e=>{
   if(chip){S.filter=chip.dataset.filter;renderAssignments();return;}
   const start=e.target.closest('[data-startwf]');
   if(start){openModal(start.dataset.startwf);return;}
+  const dl=e.target.closest('[data-dldl]');
+  if(dl){dlDownload(dl.dataset.dldl,dl.dataset.kind,dl.dataset.title);return;}
+  if(e.target.closest('#ai-export')){exportAnswer();return;}
+  const secDel=e.target.closest('[data-sec-del]');
+  if(secDel){secDel.closest('.dl-sec').remove();return;}
   if(e.target.classList.contains('overlay'))e.target.classList.remove('show');
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape')$('#modal-new').classList.remove('show');});
+  if(e.key==='Escape'){$('#modal-new').classList.remove('show');
+    $('#modal-dl').classList.remove('show');}});
 window.addEventListener('hashchange',()=>route(true));
 
 /* ── Boot ─────────────────────────────────────────────────────────────── */

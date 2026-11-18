@@ -16,9 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.api.routes import health, jobs, maintenance
 from app.agents.routes import router as agents_router
+from app.coordination.routes import router as coordination_router
+from app.deliverables.routes import router as deliverables_router
 from app.knowledge.routes import router as knowledge_router
 from app.ai.routes import router as ai_router, prompt_router as ai_prompt_router
-from app.coordination.routes import router as coordination_router
 from app.jobs.queue import QueueUnavailable
 
 logging.basicConfig(
@@ -32,6 +33,7 @@ _SCHEMA_PATHS = {
     "knowledge": Path(__file__).resolve().parent / "knowledge" / "schema.sql",
     "ai": Path(__file__).resolve().parent / "ai" / "schema.sql",
     "coordination": Path(__file__).resolve().parent / "coordination" / "schema.sql",
+    "deliverables": Path(__file__).resolve().parent / "deliverables" / "schema.sql",
 }
 
 
@@ -101,6 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_prompt_router)
     app.include_router(coordination_router)
     app.include_router(agents_router)
+    app.include_router(deliverables_router)
     return app
 
 

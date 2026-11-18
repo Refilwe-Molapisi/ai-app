@@ -53,12 +53,13 @@ def default_registry(queue: PostgresJobQueue | None = None) -> dict[str, Handler
     know how a job is executed."""
     from app.knowledge.handlers import default_knowledge_handlers
     from app.coordination.handlers import default_coordination_handlers
+    from app.deliverables.handlers import default_deliverable_handlers
 
     registry: dict[str, Handler] = {
         "demo.echo": _handle_echo,
         **default_knowledge_handlers(queue),     # Phase 2: knowledge.extract / knowledge.embed
         **default_coordination_handlers(queue),  # Phase 4: assignment.step (workflow engine)
-        # TODO(Phase 6): "report.generate"    — deliverable generation
+        **default_deliverable_handlers(queue),   # Phase 6: report.generate (deliverables)
     }
     return registry
 

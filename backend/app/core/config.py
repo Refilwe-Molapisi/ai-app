@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     storage_access_key: str = ""
     storage_secret_key: str = ""
     storage_region: str = "za-region"
+    # Dev/test convenience: plain directory as the storage root instead of an
+    # S3-compatible bucket (Layer 1, zero cloud services). Never set in
+    # production — artefacts must land in a private bucket (§7.4).
+    storage_local_dir: str = ""  # env: STORAGE_LOCAL_DIR
 
     # Job runner
     job_run_secret: str = "change-me-local"

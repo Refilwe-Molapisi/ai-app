@@ -8,11 +8,19 @@ file contents (§7.3).
 
 Security posture (§7.4): buckets private by default; access only via backend
 authorisation; temporary signed URLs for downloads; credentials server-side.
+
+Selection (get_storage_adapter): STORAGE_LOCAL_DIR opts into a plain-
+directory implementation — the development/test convenience that keeps the
+whole pipeline runnable with zero cloud services (Layer 1). In production the
+local dir is never configured, so artefacts land in a real private bucket;
+with neither S3 nor a local dir configured, construction fails loudly.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from app.core.config import Settings, get_settings
 
@@ -94,6 +102,48 @@ class StorageAdapter:
             return False
 
 
-def get_storage_adapter(settings: Settings | None = None) -> StorageAdapter:
+class LocalFileStorage:
+    """Plain-directory implementation of the same interface — development and
+    test use only (STORAGE_LOCAL_DIR). Keys are slash-separated relative paths
+    with traversal refused; presigned URLs do not exist here, downloads stream
+    through the authorised API instead."""
+
+    provider_name = "local-fs"
+
+    def __init__(self, root: str):
+        self._root = Path(root).expanduser().resolve()
+        self._root.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, key: str) -> Path:
+        candidate = (self._root / key).resolve()
+        if candidate != self._root and self._root not in candidate.parents:
+            raise ValueError(f"invalid storage key (path traversal): {key!r}")
+        return candidate
+
+    def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> StoredObject:
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return StoredObject(key=key, bucket=str(self._root), size_bytes=len(data))
+
+    def get(self, key: str) -> bytes:
+        return self._path(key).read_bytes()
+
+    def presigned_get(self, key: str, expires_seconds: int = 600) -> str:
+        raise NotImplementedError(
+            "LocalFileStorage has no signed URLs — downloads stream through the API")
+
+    def delete(self, key: str) -> None:
+        path = self._path(key)
+        if path.exists():
+            path.unlink()
+
+    def exists(self, key: str) -> bool:
+        return self._path(key).exists()
+
+
+def get_storage_adapter(settings: Settings | None = None) -> StorageAdapter | LocalFileStorage:
     settings = settings or get_settings()
+    if settings.storage_local_dir:
+        return LocalFileStorage(settings.storage_local_dir)
     return StorageAdapter(settings)
