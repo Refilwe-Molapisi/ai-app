@@ -18,6 +18,9 @@ Step executors:
                  citations + usage, stored on the step.
     kb.check     knowledge-base readiness: org index stats vs min_chunks;
                  below minimum ⇒ step fails (honest 422-class signal upstream).
+    agent.task   Phase 5 specialist agent (§11 registry) through the same
+                 governed path (run_agent); output carries the agent identity
+                 block so the trail shows WHO produced each analysis.
     gate.review  never enqueued — a bug if it is; refused loudly.
 """
 
@@ -59,6 +62,35 @@ async def _exec_ai_brief(assignment: dict, step: dict, settings) -> dict:
     }
 
 
+async def _exec_agent_task(assignment: dict, step: dict, settings) -> dict:
+    """Phase 5: run a §11 specialist agent through the shared governed path.
+    The slug was validated at planning time; the question is concrete."""
+    from app.agents.service import run_agent
+
+    params = step.get("params") or {}
+    question = params.get("question") or ""
+    if not params.get("agent"):
+        raise ValueError("agent.task step has no 'agent' slug in params")
+    if not question:
+        raise ValueError("agent.task step has no question (params.question missing)")
+    result = await run_agent(
+        agent_slug=params["agent"], question=question,
+        org_id=assignment["org_id"],
+        principal_label=f"assignment:{assignment['id']}",
+        engagement_id=assignment.get("engagement_id"),
+        settings=settings,
+    )
+    return {
+        "agent": result["agent"],
+        "question": question,
+        "answer": result["answer"],
+        "grounded": result["grounded"],
+        "citations": result["citations"],
+        "usage": result["usage"],
+        "retrieval": {"chunks_in_index": result["retrieval"]["chunks_in_index"]},
+    }
+
+
 async def _exec_kb_check(assignment: dict, step: dict, settings) -> dict:
     from app.knowledge.store import KnowledgeStore
 
@@ -83,6 +115,7 @@ async def _exec_gate_review(assignment: dict, step: dict, settings) -> dict:
 _EXECUTORS = {
     "ai.brief": _exec_ai_brief,
     "kb.check": _exec_kb_check,
+    "agent.task": _exec_agent_task,
     "gate.review": _exec_gate_review,
 }
 

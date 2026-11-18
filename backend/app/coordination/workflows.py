@@ -7,10 +7,14 @@ philosophy ('add adapters here, nowhere else').
 Step kinds (executors registered in app/coordination/handlers.py):
     ai.brief      grounded knowledge-base answer → step output (Phase 3 service)
     kb.check      knowledge-base readiness check (stats vs min_chunks)
+    agent.task    specialist agent run (Phase 5 registry, §11) — params carry
+                  {"agent": slug, "question_template": "..."}; the slug is
+                  validated at planning time and the question rendered concrete
     gate.review   human approval gate — advanced via POST /assignments/{id}/approve
 
 Rules enforced here:
     - steps non-empty; kinds must be registered executors;
+    - agent.task slugs must exist in the Phase 5 registry;
     - at most one trailing gate; nothing after a gate (a gate is a checkpoint,
       not a mid-pipeline pause — keeps the state machine inspectable).
 """
@@ -61,6 +65,59 @@ WORKFLOWS: dict[str, WorkflowDef] = {
             StepSpec(name="review", kind="gate.review", is_gate=True),
         ),
     ),
+    # ── Phase 5: division workflows executed by the §11 specialist agents ────
+    "company.bi-diagnostic": WorkflowDef(
+        name="company.bi-diagnostic",
+        description="Business data & performance diagnostic by the BI & "
+                    "Analytics agent (§11.1): knowledge readiness, analysis, "
+                    "human review.",
+        required_inputs=("topic",),
+        steps=(
+            StepSpec(name="data-intake", kind="kb.check",
+                     params={"min_chunks": 1}),
+            StepSpec(name="analysis", kind="agent.task",
+                     params={"agent": "bi-analytics",
+                             "question_template": "Analyse: {topic}. Produce "
+                             "management-ready findings with data-quality and "
+                             "gap notes, separating verified figures from "
+                             "estimates and unavailable information."}),
+            StepSpec(name="review", kind="gate.review", is_gate=True),
+        ),
+    ),
+    "client.competitor-scan": WorkflowDef(
+        name="client.competitor-scan",
+        description="Competitive research by the Economic & Commercial "
+                    "Intelligence agent (§11.2), with sources preserved and "
+                    "facts/estimates separated, held for review.",
+        required_inputs=("subject",),
+        steps=(
+            StepSpec(name="research", kind="agent.task",
+                     params={"agent": "commercial-intelligence",
+                             "question_template": "Research {subject}: "
+                             "competitive landscape, pricing comparisons and "
+                             "market positioning. Preserve sources, separate "
+                             "verified facts from estimates and unavailable "
+                             "information."}),
+            StepSpec(name="review", kind="gate.review", is_gate=True),
+        ),
+    ),
+    "client.controls-review": WorkflowDef(
+        name="client.controls-review",
+        description="Operational risk & controls review by the Risk, Process & "
+                    "Controls agent (§11.3): register-ready entries with "
+                    "evidence traces, held for review.",
+        required_inputs=("process",),
+        steps=(
+            StepSpec(name="assessment", kind="agent.task",
+                     params={"agent": "risk-controls",
+                             "question_template": "Review the {process} "
+                             "process: identify operational risks and control "
+                             "gaps, and produce register-ready entries with "
+                             "recommended actions and owners-by-role."},
+                     ),
+            StepSpec(name="review", kind="gate.review", is_gate=True),
+        ),
+    ),
 }
 
 
@@ -88,7 +145,7 @@ def validate_definition(wf: WorkflowDef) -> None:
 
 # Executor keys — kept in one place so both the registry self-check and the
 # handler dispatch table agree (handlers.py builds the actual callables).
-STEP_KINDS = ("ai.brief", "kb.check", "gate.review")
+STEP_KINDS = ("ai.brief", "kb.check", "agent.task", "gate.review")
 
 
 def registry_summary() -> list[dict]:

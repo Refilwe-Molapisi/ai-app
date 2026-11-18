@@ -137,7 +137,9 @@ aiservice._model = lambda: FakeModel()
 # ── 5. Workflow A: company.knowledge-brief — the full happy path ─────────────
 r = client.get("/workflows", headers=H)
 check("workflows listed via API",
-      r.status_code == 200 and r.json()["count"] == 2, r.text[:150])
+      r.status_code == 200
+      and {"company.knowledge-brief", "client.onboarding-check"}
+      <= {w["name"] for w in r.json()["workflows"]}, r.text[:150])
 
 before_usage = client.get("/ai/usage", headers=H,
                           params={"org_id": "company"}).json()["totals"]["calls"]

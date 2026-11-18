@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.api.routes import health, jobs, maintenance
+from app.agents.routes import router as agents_router
 from app.knowledge.routes import router as knowledge_router
 from app.ai.routes import router as ai_router, prompt_router as ai_prompt_router
 from app.coordination.routes import router as coordination_router
@@ -62,10 +63,10 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="CAIOS API",
-        version="0.4.0",
+        version="0.5.0",
         description="Company AI Operations System — Phases 0–4 foundations, "
-                    "knowledge ingestion (2), AI integration (3) and central "
-                    "coordination (4)",
+                    "knowledge ingestion (2), AI integration (3), central "
+                    "coordination (4) and specialist agents (5)",
         lifespan=lifespan,
     )
 
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_router)
     app.include_router(ai_prompt_router)
     app.include_router(coordination_router)
+    app.include_router(agents_router)
     return app
 
 

@@ -667,7 +667,8 @@ async function live(){
   if(stat)stat.innerHTML='<div class="label">AI spend — last 30 d</div><div class="value">$'+
    (s.estimated_cost_usd||0).toFixed(2)+'</div><div class="delta neutral">'+s.calls+
    " model call"+(s.calls===1?"":"s")+(s.errors?(" · "+s.errors+" errored"):"")+"</div>";
-  badge("LIVE · "+cfg.base.replace(/^https?:\/\//,""),"var(--brand-green)");
+  let agentsN="";try{agentsN=" · "+(await api("/agents")).count+" agents online"}catch(e){}
+  badge("LIVE · "+cfg.base.replace(/^https?:\/\//,"")+agentsN,"var(--brand-green)");
   LIVE.on=true;
   toast("<b>Live mode</b> — real assignments from "+cfg.base);
  }catch(e){

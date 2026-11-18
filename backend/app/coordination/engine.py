@@ -53,6 +53,14 @@ def plan_assignment(workflow: str, inputs: dict | None) -> tuple[object, list[di
     steps: list[dict] = []
     for i, spec in enumerate(wf.steps, start=1):
         params = dict(spec.params)
+        if spec.kind == "agent.task":  # Phase 5: slug must exist in the registry
+            from app.agents.definitions import UnknownAgent, get_agent
+            slug = str(params.get("agent") or "")
+            try:
+                get_agent(slug)
+            except (UnknownAgent, ValueError) as exc:
+                raise InvalidWorkflowInput(
+                    f"step '{spec.name}' references an unregistered agent: {exc}") from exc
         if "question_template" in params:
             try:
                 params["question"] = str(params.pop("question_template")).format(

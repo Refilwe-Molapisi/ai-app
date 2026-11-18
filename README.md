@@ -3,11 +3,13 @@
 Working implementation of the CAIOS master specification (CAIOS-MASTER-001 v1.0),
 starting from the $0 hosting strategy (CAIOS-INFRA-001) and the approved brand
 identity. This repository covers the **Phases 0–4 foundations**, **Phase 2
-(knowledge & document ingestion)**, **Phase 3 (AI integration)** and **Phase 4
-(central coordination)**: documents upload → extraction → chunking → embeddings
-(pgvector) → org-scoped retrieval → grounded answers with citations, with
-versioned prompt templates, a full AI usage ledger, and an assignment/workflow
-engine with human approval gates and an append-only governance trail.
+(knowledge & document ingestion)**, **Phase 3 (AI integration)**, **Phase 4
+(central coordination)** and **Phase 5 (specialist agents)**: documents upload
+→ extraction → chunking → embeddings (pgvector) → org-scoped retrieval →
+grounded answers with citations, with versioned prompt templates, a full AI
+usage ledger, an assignment/workflow engine with human approval gates, an
+append-only governance trail, and the three §11 division agents executing
+governed workflow steps.
 
 **Status: synthetic data only.** No client-confidential information may enter
 any component until the critical validations (TV-011/012/013/020/023) pass and
@@ -25,7 +27,8 @@ caios/
 │   ├── 03-adr-and-validation-updates.md ← ADR-001 closed, ADR-009/012/014, TV register changes
 │   ├── 04-phase2-knowledge.md       ← Phase 2 implementation notes (CAIOS-KNOW-001)
 │   ├── 05-phase3-ai.md              ← Phase 3 implementation notes (CAIOS-AI-001)
-│   └── 06-phase4-coordination.md    ← Phase 4 implementation notes (CAIOS-COORD-001)
+│   ├── 06-phase4-coordination.md    ← Phase 4 implementation notes (CAIOS-COORD-001)
+│   └── 07-phase5-agents.md          ← Phase 5 implementation notes (CAIOS-AGNT-001)
 ├── infra/
 │   ├── docker-compose.yml           ← Layer 1: local stack (API + worker + Postgres/pgvector)
 │   ├── render.yaml                  ← Layer 2: Render free blueprint
@@ -43,7 +46,8 @@ caios/
 │   ├── app/knowledge/               ← Phase 2: schema, extraction, chunking, handlers, routes
 │   ├── app/ai/                      ← Phase 3: prompts (versioned), answer loop (service), usage ledger
 │   ├── app/coordination/            ← Phase 4: workflow registry, assignments, engine, gates, events
-│   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows
+│   ├── app/agents/                  ← Phase 5: the three §11 division agents (registry + governed runs)
+│   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows, /agents
 │   ├── tests/                       ← unit tests + real-Postgres integration harness
 │   └── Dockerfile                   ← same image for local, Render and the future VPS
 └── prototype/
@@ -124,10 +128,30 @@ curl -X POST localhost:8000/assignments/<id>/approve -H 'Authorization: Bearer d
 curl 'localhost:8000/assignments/<id>?org_id=org-a' -H 'Authorization: Bearer dev'  # steps + event trail
 ```
 
+### Phase 5: specialist agents on workflows (dev mode)
+
+```bash
+# the three §11 division agents: duties, permitted tools, outputs, constraints
+curl localhost:8000/agents -H 'Authorization: Bearer dev'
+
+# start an agent workflow — the agent runs as a governed step, grounded in
+# this org's knowledge base, with a §20 ledger row purpose='agent'
+curl -X POST localhost:8000/assignments -H 'Authorization: Bearer dev' \
+     -H 'Content-Type: application/json' \
+     -d '{"org_id":"org-a","workflow":"client.competitor-scan","inputs":{"subject":"Maize milling in Limpopo"}}'
+curl -X POST localhost:8000/jobs/run -H 'X-Job-Secret: change-me-local'   # agent step executes
+# → step output carries {"agent":{"slug":"commercial-intelligence",...}, "answer":..., "citations":[...]}
+
+# reword an agent's duties per org — versioned, and always grounded:
+curl -X POST localhost:8000/prompts -H 'Authorization: Bearer dev' \
+     -H 'Content-Type: application/json' \
+     -d '{"org_id":"org-a","name":"agent.commercial-intelligence","body":"House style research brief.\n{{context}}"}'
+```
+
 Open `prototype/caios-ui.html?api=http://localhost:8000&org=org-a&token=dev`
-in a browser: the prototype renders live assignments with a **LIVE** badge,
-real approve buttons and a working *New assignment* flow; without an API it
-stays on clearly-badged synthetic demo data.
+in a browser: the prototype renders live assignments with a **LIVE** badge
+(plus the online agent count), real approve buttons and a working *New
+assignment* flow; without an API it stays on clearly-badged synthetic demo data.
 
 ## Layer 2 deployment (demo/staging, cost R0)
 
@@ -144,7 +168,8 @@ The first successful backup + restore test closes TV-020.
 | 2 — Knowledge & documents | Upload → extraction (pdf/docx/html/text) → chunking → embeddings (pgvector) → org-scoped semantic search; `knowledge.*` handlers in the runner; TV-019 re-index flow — **done** (see docs/04) |
 | 3 — AI integration | Grounded answer loop (`/ai/answer`: retrieval → template → model → citations); versioned prompt management (`/prompts`); §20 usage ledger incl. failure rows (`/ai/usage`) — **done** (see docs/05) |
 | 4 — Central coordination | Declarative workflow registry; assignments with ordered steps (queue-executed + human gates); `/assignments` + `/workflows` + approve/cancel; append-only event trail; UI prototype live-API layer — **done** (see docs/06) |
-| 5–10 | Not started (agents, deliverables, QA governance, internal ops, deployment, continuous dev) |
+| 5 — Specialist agents | The three §11 division agents as registry definitions (responsibilities, permitted tools, required outputs, quality standards, §11 constraints); `agent.task` step kind; three agent workflows; `/agents`; org-versioned instruction overrides with mandatory grounding; §20 ledger `agent` purpose — **done** (see docs/07) |
+| 6–10 | Not started (deliverables & document generation, QA governance, internal ops, deployment, continuous dev) |
 
 ## Verification already performed
 
@@ -167,13 +192,22 @@ PostgreSQL 16 + pgvector (user-space via `pgserver`, or any `DATABASE_URL`):
   the public API with a real queue job and §20 ledger row, gate approve →
   completed, cancel path, honest fail-fast on an empty org, cross-org 404,
   status filters).
-- **API smoke** (`scripts/smoke_backend.py`, no DB): all 22 routes in OpenAPI,
-  auth fail-closed on upload/search/answer/prompts/usage/assignments —
-  **16/16**.
-- Phase 2 + 3 suites re-run after Phase 4 wiring: ALL PASS (no regressions).
+- **Phase 5** — unit `tests/test_phase5.py` **29/29** (agent registry
+  self-validation and rejection matrix, §11 constraints per agent, grounding
+  block mandatory, `agent.task` kind/executor agreement, planning-time agent
+  validation, `/agents` contract, no ad-hoc run endpoint); integration
+  `tests/integration_phase5.py` **19/19** (full competitor-scan lifecycle with
+  the agent identity block, grounding verified at the model boundary, §20
+  `agent` ledger row, bi-diagnostic intake-first path, second-org controls
+  review, cross-org 404).
+- **API smoke** (`scripts/smoke_backend.py`, no DB): all 23 routes in OpenAPI,
+  auth fail-closed on upload/search/answer/prompts/usage/assignments/agents —
+  **18/18**.
+- Phase 2 + 3 + 4 suites re-run after Phase 5 wiring: ALL PASS (no regressions).
 - UI prototype verified in headless Chromium in both modes: demo fallback
   (DEMO DATA badge) and live-API mode against a real API + Postgres (LIVE
-  badge, real rows, live AI-spend stat); no console errors.
+  badge with online agent count, real rows, live AI-spend stat); no console
+  errors.
 
 The real-database integration harness caught and fixed a latent Phase 0–4 bug:
 psycopg3 returns tuple rows unless `row_factory=dict_row` is pinned on the
@@ -200,4 +234,8 @@ pool — invisible to every 503-path smoke test, fatal on a live queue.
   with the error preserved, and retried jobs exit as no-op skips (§11).
 - Every assignment transition is an append-only event row with actor and
   detail — the §13 trail is the audit, not a log file.
+- Specialist agents run only as governed workflow steps — there is no ad-hoc
+  run endpoint; the §11 constraints ride in every agent's system prompt, and
+  an instruction override without the grounding block is refused, never run
+  ungrounded (§11.2/11.3, §8.3).
 - Everything is containerised: Render → Contabo is a data migration, not a rewrite.

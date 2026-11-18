@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS ai_usage (
     org_id             text        NOT NULL,
     principal          text        NOT NULL DEFAULT '',
     purpose            text        NOT NULL DEFAULT 'answer'
-                       CHECK (purpose IN ('answer','generate','extract','maintenance')),
+                       CHECK (purpose IN ('answer','agent','generate','extract','maintenance')),
     provider           text        NOT NULL,
     model              text        NOT NULL,
     input_tokens       int         NOT NULL DEFAULT 0,
@@ -72,3 +72,10 @@ DROP TRIGGER IF EXISTS prompts_touch_updated_at_trg ON prompts;
 CREATE TRIGGER prompts_touch_updated_at_trg
     BEFORE UPDATE ON prompts
     FOR EACH ROW EXECUTE FUNCTION prompts_touch_updated_at();
+
+-- Phase 5 upgrade path: purpose gains 'agent' (§11 specialist agent runs).
+-- CREATE TABLE IF NOT EXISTS does not touch existing tables, so recreate the
+-- CHECK constraint idempotently — older deployments upgrade in place.
+ALTER TABLE ai_usage DROP CONSTRAINT IF EXISTS ai_usage_purpose_check;
+ALTER TABLE ai_usage ADD CONSTRAINT ai_usage_purpose_check
+    CHECK (purpose IN ('answer','agent','generate','extract','maintenance'));
