@@ -4,12 +4,13 @@ Working implementation of the CAIOS master specification (CAIOS-MASTER-001 v1.0)
 starting from the $0 hosting strategy (CAIOS-INFRA-001) and the approved brand
 identity. This repository covers the **Phases 0–4 foundations**, **Phase 2
 (knowledge & document ingestion)**, **Phase 3 (AI integration)**, **Phase 4
-(central coordination)** and **Phase 5 (specialist agents)**: documents upload
-→ extraction → chunking → embeddings (pgvector) → org-scoped retrieval →
-grounded answers with citations, with versioned prompt templates, a full AI
-usage ledger, an assignment/workflow engine with human approval gates, an
-append-only governance trail, and the three §11 division agents executing
-governed workflow steps.
+(central coordination)**, **Phase 5 (specialist agents)** and the **production
+operator frontend (Vercel)**: documents upload → extraction → chunking →
+embeddings (pgvector) → org-scoped retrieval → grounded answers with citations,
+with versioned prompt templates, a full AI usage ledger, an assignment/workflow
+engine with human approval gates, an append-only governance trail, the three
+§11 division agents executing governed workflow steps, and a brand-true single-file
+console deployed as a static site.
 
 **Status: synthetic data only.** No client-confidential information may enter
 any component until the critical validations (TV-011/012/013/020/023) pass and
@@ -28,7 +29,8 @@ caios/
 │   ├── 04-phase2-knowledge.md       ← Phase 2 implementation notes (CAIOS-KNOW-001)
 │   ├── 05-phase3-ai.md              ← Phase 3 implementation notes (CAIOS-AI-001)
 │   ├── 06-phase4-coordination.md    ← Phase 4 implementation notes (CAIOS-COORD-001)
-│   └── 07-phase5-agents.md          ← Phase 5 implementation notes (CAIOS-AGNT-001)
+│   ├── 07-phase5-agents.md          ← Phase 5 implementation notes (CAIOS-AGNT-001)
+│   └── 08-frontend.md               ← production frontend + Vercel deployment notes (CAIOS-FE-001)
 ├── infra/
 │   ├── docker-compose.yml           ← Layer 1: local stack (API + worker + Postgres/pgvector)
 │   ├── render.yaml                  ← Layer 2: Render free blueprint
@@ -50,6 +52,9 @@ caios/
 │   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows, /agents
 │   ├── tests/                       ← unit tests + real-Postgres integration harness
 │   └── Dockerfile                   ← same image for local, Render and the future VPS
+├── frontend/                        ← production operator console (Vercel Root Directory; no build step)
+│   ├── index.html                   ← single-file app: overview, assignments+gates, knowledge, agents, AI console, usage, connection
+│   └── vercel.json                  ← static preset, security headers, cleanUrls
 └── prototype/
     └── caios-ui.html                ← single-file UI prototype; live-API layer (LIVE/DEMO badges)
 ```
@@ -160,6 +165,21 @@ cron-job.org jobs (`/health` @10 min keep-warm, `/jobs/run` @3 min with
 `X-Job-Secret`), and the two GitHub Actions workflows with repository secrets.
 The first successful backup + restore test closes TV-020.
 
+## Frontend deployment (Vercel — monorepo)
+
+The operator console deploys from this same repo as a **static site**:
+
+1. Import `Refilwe-Molapisi/ai-app` into Vercel; set the project's
+   **Root Directory** to `frontend` (Framework: Other — `vercel.json` pins
+   static output, no build step).
+2. Deploy; copy the production + preview URLs.
+3. On the API (Render), set `CORS_ORIGINS` to those URLs (comma-separated)
+   and redeploy once. Never a wildcard.
+
+The console then shows a **LIVE** badge with real assignments, gates, agents
+and the §20 spend; without an API it stays on clearly-badged demo data.
+Full notes: `docs/08-frontend.md` (CAIOS-FE-001).
+
 ## What is implemented vs. the roadmap
 
 | Phase (master spec §30) | State in this repo |
@@ -169,6 +189,7 @@ The first successful backup + restore test closes TV-020.
 | 3 — AI integration | Grounded answer loop (`/ai/answer`: retrieval → template → model → citations); versioned prompt management (`/prompts`); §20 usage ledger incl. failure rows (`/ai/usage`) — **done** (see docs/05) |
 | 4 — Central coordination | Declarative workflow registry; assignments with ordered steps (queue-executed + human gates); `/assignments` + `/workflows` + approve/cancel; append-only event trail; UI prototype live-API layer — **done** (see docs/06) |
 | 5 — Specialist agents | The three §11 division agents as registry definitions (responsibilities, permitted tools, required outputs, quality standards, §11 constraints); `agent.task` step kind; three agent workflows; `/agents`; org-versioned instruction overrides with mandatory grounding; §20 ledger `agent` purpose — **done** (see docs/07) |
+| Production frontend | Single-file operator console (`frontend/`, monorepo + Vercel Root Directory): overview, assignments with gate approve/cancel, knowledge upload/search, agent registry with one-click workflows, AI console, usage & spend, connection manager; LIVE/DEMO honesty; `CORS_ORIGINS` allow-list on the API — **done** (see docs/08) |
 | 6–10 | Not started (deliverables & document generation, QA governance, internal ops, deployment, continuous dev) |
 
 ## Verification already performed
@@ -208,6 +229,11 @@ PostgreSQL 16 + pgvector (user-space via `pgserver`, or any `DATABASE_URL`):
   (DEMO DATA badge) and live-API mode against a real API + Postgres (LIVE
   badge with online agent count, real rows, live AI-spend stat); no console
   errors.
+- **Production frontend** verified in headless Chromium against a real API +
+  PG16: LIVE connect with `?api=&org=&token=`, gate **approve through the UI**
+  (prompt-dialog note → COMPLETED, 7 trail events), **start assignment from an
+  agent card** (dynamic required-input modal → RUNNING/QUEUED), demo-mode
+  read-only guarding, and 375 px mobile layout with zero horizontal overflow.
 
 The real-database integration harness caught and fixed a latent Phase 0–4 bug:
 psycopg3 returns tuple rows unless `row_factory=dict_row` is pinned on the

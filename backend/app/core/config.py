@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     job_time_budget_seconds: int = 25
     job_max_attempts: int = 3
 
+    # CORS origins for browser frontends (comma-separated, e.g. the Vercel
+    # domain). Localhost origins are added automatically outside production.
+    cors_origins: str = ""  # env: CORS_ORIGINS (fields map 1:1, no prefix)
+
     # Knowledge & documents (Phase 2 — chunking/retrieval defaults are safe)
     knowledge_chunk_chars: int = 1200      # ≈ 300–400 tokens per chunk
     knowledge_chunk_overlap: int = 150     # word-aligned overlap between chunks

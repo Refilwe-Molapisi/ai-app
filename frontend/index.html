@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAIOS — Company AI Operations System</title>
+<meta name="description" content="CAIOS operator console: governed AI assignments, specialist agents, knowledge base and usage governance.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Design tokens (docs/02-design-system.md) ─────────────────────────── */
+:root{
+  --brand-blue:#136CFC; --brand-dark:#152641; --brand-green:#C3F84A;
+  --brand-light:#E8F4FC; --green-text:#3D5A00;
+  --surface:#FFFFFF; --page-bg:#F4F8FC; --text-muted:#5A6B85; --border:#DCE7F3;
+  --red:#B3261E; --red-bg:#FCEEEC;
+  --blue-10:rgba(19,108,252,.10); --blue-25:rgba(19,108,252,.25);
+  --shadow:0 1px 2px rgba(21,38,65,.06),0 8px 24px rgba(21,38,65,.08);
+  --shadow-hover:0 2px 4px rgba(21,38,65,.08),0 12px 32px rgba(21,38,65,.12);
+  --r-card:16px; --r-btn:10px; --r-pill:999px;
+  --font-display:'Libre Baskerville',Georgia,serif;
+  --font-ui:'Montserrat',system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:16px}
+body{font-family:var(--font-ui);font-size:clamp(13px,1vw + 9px,14.5px);line-height:1.6;
+  color:var(--brand-dark);background:var(--page-bg)}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:13.5px;color:var(--brand-dark)}
+:focus-visible{outline:3px solid var(--blue-25);outline-offset:2px;border-radius:6px}
+
+/* ── App shell ─────────────────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}
+.sidebar{background:var(--brand-dark);color:#fff;display:flex;flex-direction:column;
+  padding:clamp(16px,2vw,24px) 16px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.logo{font-family:var(--font-display);font-size:clamp(22px,2vw,26px);font-weight:700;
+  letter-spacing:.5px;padding:0 12px 4px;display:flex;align-items:center;gap:10px}
+.logo .dot{width:10px;height:10px;border-radius:50%;background:var(--brand-green);flex:none}
+.logo-sub{font-size:10.5px;color:rgba(255,255,255,.55);padding:0 12px 24px;
+  text-transform:uppercase;letter-spacing:.14em;font-weight:500}
+.nav-label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;font-weight:500;
+  color:rgba(255,255,255,.45);padding:16px 12px 8px}
+.nav-item{display:flex;align-items:center;gap:12px;width:100%;min-height:42px;padding:8px 12px;
+  border-radius:var(--r-btn);color:rgba(255,255,255,.68);font-size:13.5px;font-weight:400;
+  transition:background .15s,color .15s;text-align:left}
+.nav-item svg{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.nav-item:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav-item.active{background:var(--blue-10);color:#fff;box-shadow:inset 3px 0 0 var(--brand-blue)}
+.nav-item .tag{margin-left:auto;font-size:10px;color:rgba(255,255,255,.5);
+  border:1px solid rgba(255,255,255,.22);border-radius:var(--r-pill);padding:1px 7px}
+.sidebar-foot{margin-top:auto;padding:16px 12px 0;border-top:1px solid rgba(255,255,255,.1)}
+.live{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.75)}
+.live .pulse{width:8px;height:8px;border-radius:50%;flex:none;
+  box-shadow:0 0 0 3px rgba(195,248,74,.18);animation:pulse 2.4s infinite}
+.live.on .pulse{background:var(--brand-green)}
+.live.off .pulse{background:#F2B705}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(195,248,74,.18)}50%{box-shadow:0 0 0 6px rgba(195,248,74,.06)}}
+.foot-note{font-size:10.5px;color:rgba(255,255,255,.4);margin-top:8px;word-break:break-all}
+
+/* ── Main ──────────────────────────────────────────────────────────────── */
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:clamp(10px,2vw,20px);padding:0 clamp(16px,3vw,32px);
+  min-height:64px;position:sticky;top:0;z-index:10;flex-wrap:wrap}
+.crumb{font-size:12px;color:var(--text-muted);font-weight:500}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.env-chip{font-size:10.5px;font-weight:600;border-radius:var(--r-pill);padding:4px 10px;
+  letter-spacing:.04em}
+.env-chip.on{color:var(--green-text);background:var(--brand-green)}
+.env-chip.off{color:var(--brand-dark);background:#FDEEC9;border:1px solid #E8C96A}
+.org-chip{font-size:11.5px;font-weight:600;color:var(--brand-blue);background:var(--brand-light);
+  border-radius:var(--r-pill);padding:4px 10px}
+.content{padding:clamp(20px,3vw,32px);max-width:1240px;width:100%;margin:0 auto}
+.view{display:none}
+.view.active{display:block;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ── Headings ──────────────────────────────────────────────────────────── */
+h1.page-title{font-family:var(--font-display);font-size:clamp(22px,3vw,28px);font-weight:700;line-height:1.25}
+.page-sub{color:var(--text-muted);font-size:13.5px;margin-top:4px}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+/* ── Buttons & inputs ──────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 18px;
+  border-radius:var(--r-btn);font-size:13.5px;font-weight:500;
+  transition:filter .15s,box-shadow .15s,background .15s}
+.btn-primary{background:var(--brand-blue);color:#fff;box-shadow:0 4px 14px rgba(19,108,252,.28)}
+.btn-primary:hover{filter:brightness(1.06)}
+.btn-secondary{background:var(--surface);color:var(--brand-dark);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--brand-light)}
+.btn-green{background:var(--brand-green);color:var(--brand-dark)}
+.btn-danger{background:var(--red-bg);color:var(--red)}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.field{display:grid;gap:6px;margin-bottom:14px}
+.field label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select,.field textarea{width:100%;min-height:40px;border:1px solid var(--border);
+  border-radius:var(--r-btn);padding:8px 12px;background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.field textarea{min-height:96px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;
+  border-color:var(--brand-blue);box-shadow:0 0 0 3px var(--blue-25)}
+.hint{font-size:11.5px;color:var(--text-muted)}
+
+/* ── Stat tiles ────────────────────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(14px,2vw,24px);margin:clamp(18px,3vw,28px) 0}
+.stat{background:var(--surface);border-radius:var(--r-card);padding:clamp(14px,2vw,20px) clamp(16px,2vw,24px);
+  box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
+.stat:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+.stat .label{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:500;color:var(--text-muted)}
+.stat .value{font-family:var(--font-display);font-size:clamp(24px,3vw,32px);font-weight:700;line-height:1.15;margin:8px 0 2px}
+.stat .delta{font-size:12px;font-weight:500;color:var(--text-muted)}
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+.grid-main{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:clamp(14px,2vw,24px);align-items:start}
+.grid-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:clamp(14px,2vw,24px);align-items:start}
+.card{background:var(--surface);border-radius:var(--r-card);box-shadow:var(--shadow);
+  padding:clamp(16px,2.4vw,24px);min-width:0}
+.card h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.card .card-sub{font-size:12.5px;color:var(--text-muted);margin-bottom:18px}
+.card + .card{margin-top:24px}
+.section-gap{margin-top:24px}
+
+/* ── Status pills ──────────────────────────────────────────────────────── */
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:var(--r-pill);
+  padding:3px 11px;font-size:11.5px;font-weight:500;white-space:nowrap}
+.pill.ok{background:var(--brand-green);color:var(--brand-dark)}
+.pill.progress{background:var(--brand-light);color:var(--brand-blue)}
+.pill.pending{background:#fff;color:var(--brand-blue);border:1px solid var(--brand-blue)}
+.pill.blocked{background:var(--brand-dark);color:var(--brand-green)}
+.pill.muted{background:#fff;color:var(--text-muted);border:1px solid var(--border)}
+.pill.error{background:var(--red-bg);color:var(--red)}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:500;
+  color:var(--text-muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:var(--brand-light)}
+td.num{font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
+th.num{text-align:right}
+.cell-title b{display:block;font-weight:600;font-size:13px}
+.cell-title span{font-size:11.5px;color:var(--text-muted)}
+.rowlink{cursor:pointer}
+.empty{padding:28px;text-align:center;color:var(--text-muted);font-size:13px}
+
+/* ── Filter chips ──────────────────────────────────────────────────────── */
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+.chip{border:1px solid var(--border);background:#fff;border-radius:var(--r-pill);
+  padding:6px 14px;font-size:12.5px;font-weight:500;color:var(--text-muted);transition:all .15s}
+.chip:hover{border-color:var(--brand-blue);color:var(--brand-blue)}
+.chip.active{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff}
+
+/* ── Workflow strip ────────────────────────────────────────────────────── */
+.flow{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 2px 10px}
+.flow .state{white-space:nowrap;font-size:11px;font-weight:500;border-radius:var(--r-pill);
+  padding:4px 11px;border:1px solid var(--border);color:var(--text-muted);background:#fff}
+.flow .state.now{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff}
+.flow .state.done{background:var(--brand-light);border-color:transparent;color:var(--brand-blue)}
+.flow .state.err{background:var(--red-bg);border-color:transparent;color:var(--red)}
+.flow .arrow{color:var(--border);font-size:11px;flex:none}
+
+/* ── Activity feed ─────────────────────────────────────────────────────── */
+.feed{display:grid;gap:0}
+.feed-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.feed-item:last-child{border-bottom:none}
+.feed-item p{font-size:12.5px;line-height:1.45;word-break:break-word}
+.feed-item time{font-size:11px;color:var(--text-muted);display:block}
+.feed-item .evt{font-weight:600;color:var(--brand-blue);font-size:12px}
+
+/* ── Agent cards ───────────────────────────────────────────────────────── */
+.agent-card{border-left:4px solid var(--brand-blue)}
+.agent-card h3{font-family:var(--font-display);font-size:17px;margin-bottom:2px}
+.agent-card .div-tag{display:inline-block;font-size:10.5px;font-weight:600;border-radius:6px;
+  padding:2px 8px;background:var(--brand-dark);color:var(--brand-green);margin-bottom:10px}
+.duty{margin:14px 0 0}
+.duty h4{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);
+  font-weight:600;margin-bottom:4px}
+.duty ul{padding-left:18px;font-size:12.5px;color:var(--brand-dark)}
+.duty li{margin:3px 0}
+
+/* ── Answer console ────────────────────────────────────────────────────── */
+.answer{background:var(--brand-light);border-radius:var(--r-card);padding:20px 24px;
+  font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+.citations{display:grid;gap:8px;margin-top:14px}
+.cite{font-size:12px;color:var(--text-muted);background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-btn);padding:8px 12px}
+.cite b{color:var(--brand-dark)}
+.usage-line{font-size:11.5px;color:var(--text-muted);margin-top:12px}
+
+/* ── Modal ─────────────────────────────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(21,38,65,.45);display:none;
+  place-items:center;z-index:40;padding:16px}
+.overlay.show{display:grid}
+.modal{background:var(--surface);border-radius:var(--r-card);box-shadow:var(--shadow-hover);
+  width:min(560px,100%);max-height:88vh;overflow-y:auto;padding:24px}
+.modal h2{font-size:17px;margin-bottom:4px}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+
+/* ── Toast & errors ────────────────────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,16px);opacity:0;
+  background:var(--brand-dark);color:#fff;padding:11px 20px;border-radius:var(--r-btn);
+  font-size:13px;box-shadow:var(--shadow-hover);pointer-events:none;transition:all .25s;z-index:50;
+  max-width:min(92vw,560px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast b{color:var(--brand-green);font-weight:600}
+.errbox{background:var(--red-bg);color:var(--red);border-radius:var(--r-btn);
+  padding:12px 16px;font-size:13px;margin:14px 0;display:none;word-break:break-word}
+.errbox.show{display:block}
+
+/* ── Connection view ───────────────────────────────────────────────────── */
+.conn-status{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:16px}
+.conn-status .pulse{width:9px;height:9px;border-radius:50%;flex:none}
+.code-note{background:var(--brand-dark);color:rgba(255,255,255,.85);border-radius:var(--r-btn);
+  padding:12px 16px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  overflow-x:auto;white-space:pre;margin-top:14px}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width:1080px){.stats{grid-template-columns:repeat(2,1fr)}.grid-main{grid-template-columns:1fr}}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr}
+  .sidebar{position:static;height:auto;flex-direction:row;align-items:center;flex-wrap:wrap;gap:4px;padding:16px}
+  .sidebar .logo,.sidebar .logo-sub{padding:0 8px}
+  .nav-label,.sidebar-foot{display:none}
+  .nav-item{width:auto;min-height:36px;padding:6px 12px}
+  .content{padding:20px}
+  .stats{grid-template-columns:1fr 1fr}
+}
+@media (max-width:480px){.stats{grid-template-columns:1fr}.topbar{padding:10px 16px}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ SIDEBAR ══════════════════════════════════════════════════════ -->
+  <nav class="sidebar" aria-label="Primary">
+    <div class="logo">CAIOS<span class="dot" aria-hidden="true"></span></div>
+    <div class="logo-sub">Company AI Operations System</div>
+
+    <div class="nav-label">Operations</div>
+    <button class="nav-item" data-view="overview">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Overview</button>
+    <button class="nav-item" data-view="assignments">
+      <svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Assignments</button>
+    <button class="nav-item" data-view="knowledge">
+      <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      Knowledge</button>
+
+    <div class="nav-label">Service divisions</div>
+    <button class="nav-item" data-view="agents">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+      Specialist Agents<span class="tag">3</span></button>
+
+    <div class="nav-label">Intelligence</div>
+    <button class="nav-item" data-view="ai">
+      <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 1 0-3.1 6.3L21 20l-.9-3.4A7.9 7.9 0 0 0 21 12z"/><path d="M8.5 11h7M8.5 14h4"/></svg>
+      AI Console</button>
+    <button class="nav-item" data-view="usage">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+      Usage &amp; Spend</button>
+
+    <div class="nav-label">Administration</div>
+    <button class="nav-item" data-view="workflows">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-2M12 13.5v2"/></svg>
+      Workflows</button>
+    <button class="nav-item" data-view="connection">
+      <svg viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0"/><circle cx="12" cy="18.5" r="1.4"/><path d="M2.5 9.5a14 14 0 0 1 19 0"/></svg>
+      Connection</button>
+
+    <div class="sidebar-foot">
+      <div class="live off" id="live"><span class="pulse" aria-hidden="true"></span><span id="live-label">Checking API…</span></div>
+      <div class="foot-note" id="foot-note">No API configured — demo data</div>
+    </div>
+  </nav>
+
+  <!-- ═══ MAIN ═════════════════════════════════════════════════════════ -->
+  <div class="main">
+    <header class="topbar">
+      <span class="crumb" id="crumb">Overview</span>
+      <div class="topbar-right">
+        <span class="org-chip" id="org-chip">org: —</span>
+        <span class="env-chip off" id="env-chip">DEMO DATA</span>
+        <button class="btn btn-primary" id="btn-new">+ New assignment</button>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- ── Overview ─────────────────────────────────────────────────── -->
+      <section class="view" id="view-overview" aria-label="Overview">
+        <div class="row-between">
+          <div>
+            <h1 class="page-title">Operations overview</h1>
+            <p class="page-sub">Governed AI work across the company and its clients — every model call ledgered, every step gated.</p>
+          </div>
+        </div>
+        <div class="stats" id="ov-stats"></div>
+        <div class="errbox" id="ov-err"></div>
+        <div class="grid-main">
+          <div class="card">
+            <h2>Recent assignments</h2>
+            <div class="card-sub">Click a row to open the full trail — steps, outputs and approvals.</div>
+            <div class="table-wrap" id="ov-assignments"></div>
+          </div>
+          <div>
+            <div class="card">
+              <h2>Specialist agents</h2>
+              <div class="card-sub" id="ov-agents-sub">Registry status</div>
+              <div class="feed" id="ov-agents"></div>
+            </div>
+            <div class="card">
+              <h2>Knowledge base</h2>
+              <div class="card-sub" id="ov-kb-sub">Indexed material</div>
+              <div class="feed" id="ov-kb"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Assignments list ─────────────────────────────────────────── -->
+      <section class="view" id="view-assignments" aria-label="Assignments">
+        <div class="row-between">
+          <div>
+            <h1 class="page-title">Assignments</h1>
+            <p class="page-sub">Every workflow run: steps execute on the queue, gates wait for a human decision.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-new-2">+ New assignment</button>
+        </div>
+        <div class="chips" id="asg-filters" role="tablist"></div>
+        <div class="errbox" id="asg-err"></div>
+        <div class="card"><div class="table-wrap" id="asg-table"></div></div>
+      </section>
+
+      <!-- ── Assignment detail ────────────────────────────────────────── -->
+      <section class="view" id="view-assignment" aria-label="Assignment detail">
+        <div id="asg-detail"></div>
+      </section>
+
+      <!-- ── Knowledge ────────────────────────────────────────────────── -->
+      <section class="view" id="view-knowledge" aria-label="Knowledge base">
+        <div class="row-between">
+          <div>
+            <h1 class="page-title">Knowledge base</h1>
+            <p class="page-sub">Documents upload → extraction → chunking → embeddings. Search is org-scoped and embedder-pinned.</p>
+          </div>
+        </div>
+        <div class="errbox" id="kb-err"></div>
+        <div class="grid-main">
+          <div class="card">
+            <h2>Documents</h2>
+            <div class="card-sub" id="kb-docs-sub">Metadata only — text never leaves the API.</div>
+            <div class="table-wrap" id="kb-docs"></div>
+          </div>
+          <div>
+            <div class="card">
+              <h2>Upload a document</h2>
+              <div class="card-sub">pdf · docx · html · txt / md — up to the API's cap</div>
+              <form id="kb-upload">
+                <div class="field"><label for="up-file">File</label><input type="file" id="up-file" required></div>
+                <div class="field"><label for="up-scope">Scope</label>
+                  <select id="up-scope"><option value="company">company (shared knowledge)</option><option value="client">client (engagement)</option></select></div>
+                <div class="field"><label for="up-title">Title (optional)</label><input type="text" id="up-title" maxlength="200" placeholder="Defaults to file name"></div>
+                <button class="btn btn-primary" type="submit" id="up-btn">Upload &amp; index</button>
+                <p class="hint" style="margin-top:10px">Indexing runs on the worker queue; refresh in a few seconds to see status.</p>
+              </form>
+            </div>
+            <div class="card">
+              <h2>Semantic search</h2>
+              <div class="card-sub">Try the retrieval layer directly</div>
+              <form id="kb-search-form">
+                <div class="field"><label for="kb-q">Query</label>
+                  <input type="text" id="kb-q" placeholder="e.g. VAT registration requirements" required></div>
+                <button class="btn btn-secondary" type="submit">Search</button>
+              </form>
+              <div class="section-gap" id="kb-results"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Agents ───────────────────────────────────────────────────── -->
+      <section class="view" id="view-agents" aria-label="Specialist agents">
+        <h1 class="page-title">Specialist agents</h1>
+        <p class="page-sub">The three §11 division agents — duties, permitted tools, required outputs and constraints, carried as data in the registry. They run only as governed workflow steps.</p>
+        <div class="errbox" id="ag-err"></div>
+        <div class="grid-two section-gap" id="agent-cards"></div>
+      </section>
+
+      <!-- ── AI console ───────────────────────────────────────────────── -->
+      <section class="view" id="view-ai" aria-label="AI console">
+        <h1 class="page-title">AI console</h1>
+        <p class="page-sub">Grounded answers: org-scoped retrieval → active prompt template → model → citations. Ungrounded answers say so.</p>
+        <div class="errbox" id="ai-err"></div>
+        <div class="grid-main section-gap">
+          <div class="card">
+            <h2>Ask the knowledge base</h2>
+            <div class="card-sub">POST /ai/answer — one governed call, one ledger row</div>
+            <form id="ai-form">
+              <div class="field"><label for="ai-q">Question</label>
+                <textarea id="ai-q" placeholder="e.g. Summarise the client's VAT obligations from the indexed material." required></textarea></div>
+              <button class="btn btn-primary" type="submit" id="ai-btn">Answer</button>
+            </form>
+            <div class="section-gap" id="ai-answer"></div>
+          </div>
+          <div class="card">
+            <h2>How answers stay honest</h2>
+            <div class="feed">
+              <div class="feed-item"><p><span class="evt">grounded flag</span> — true only when chunks were retrieved; the hint explains an empty index or an embedder mismatch.</p></div>
+              <div class="feed-item"><p><span class="evt">citations</span> — document + chunk seq for every piece of evidence used.</p></div>
+              <div class="feed-item"><p><span class="evt">ledger row</span> — every call (including failures) is written to the §20 usage ledger.</p></div>
+              <div class="feed-item"><p><span class="evt">prompt version</span> — the template that produced this answer is pinned in the response.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Usage ────────────────────────────────────────────────────── -->
+      <section class="view" id="view-usage" aria-label="Usage and spend">
+        <div class="row-between">
+          <div>
+            <h1 class="page-title">Usage &amp; spend</h1>
+            <p class="page-sub">§20 ledger — tokens, estimated cost and failures per org. Costs use conservative peak pricing until TV-007 verifies provider rates.</p>
+          </div>
+        </div>
+        <div class="errbox" id="us-err"></div>
+        <div class="stats" id="us-stats"></div>
+        <div class="card">
+          <h2>By model</h2>
+          <div class="table-wrap" id="us-models"></div>
+        </div>
+      </section>
+
+      <!-- ── Workflows ────────────────────────────────────────────────── -->
+      <section class="view" id="view-workflows" aria-label="Workflows">
+        <h1 class="page-title">Workflows</h1>
+        <p class="page-sub">Declarative registry — start one from here or from an agent card. Steps are planned concretely at creation.</p>
+        <div class="errbox" id="wf-err"></div>
+        <div class="grid-two section-gap" id="wf-cards"></div>
+      </section>
+
+      <!-- ── Connection ───────────────────────────────────────────────── -->
+      <section class="view" id="view-connection" aria-label="Connection">
+        <h1 class="page-title">Connection</h1>
+        <p class="page-sub">Point this console at a CAIOS API (Render / local). Stored in this browser only; never sent anywhere except the API you name.</p>
+        <div class="errbox" id="cn-err"></div>
+        <div class="grid-two section-gap">
+          <div class="card">
+            <h2>API connection</h2>
+            <div class="conn-status" id="cn-status"></div>
+            <form id="cn-form">
+              <div class="field"><label for="cn-base">API base URL</label>
+                <input type="url" id="cn-base" placeholder="https://caios-api.onrender.com" spellcheck="false">
+                <span class="hint">Leave empty to stay on clearly-badged demo data.</span></div>
+              <div class="field"><label for="cn-org">Org ID</label>
+                <input type="text" id="cn-org" placeholder="company" spellcheck="false"></div>
+              <div class="field"><label for="cn-token">Access token</label>
+                <input type="password" id="cn-token" placeholder="dev token in development; Supabase JWT later">
+                <span class="hint">Development mode accepts any token (e.g. <code>dev</code>); production verifies Supabase JWTs server-side.</span></div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" type="submit" id="cn-test">Save &amp; connect</button>
+                <button class="btn btn-secondary" type="button" id="cn-clear">Disconnect</button>
+              </div>
+            </form>
+          </div>
+          <div class="card">
+            <h2>Deployment notes</h2>
+            <div class="feed">
+              <div class="feed-item"><p><span class="evt">Vercel</span> — this page deploys as a static site (no build step); set the project's Root Directory to <b>frontend/</b>.</p></div>
+              <div class="feed-item"><p><span class="evt">Render</span> — the API needs this site's origin in <b>CAIOS_CORS_ORIGINS</b> so browsers can call it.</p></div>
+              <div class="feed-item"><p><span class="evt">Deep-link</span> — you can pre-set a connection via URL: <b>?api=…&amp;org=…&amp;token=…</b></p></div>
+            </div>
+            <div class="code-note">curl -X POST https://caios-api.onrender.com/jobs/run \
+  -H 'X-Job-Secret: …'   # keep the worker ticking</div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ── New assignment modal ─────────────────────────────────────────────── -->
+<div class="overlay" id="modal-new" role="dialog" aria-modal="true" aria-labelledby="mn-title">
+  <div class="modal">
+    <h2 id="mn-title">New assignment</h2>
+    <p class="page-sub" style="margin-bottom:16px">Pick a workflow; inputs render to concrete step parameters at creation.</p>
+    <form id="mn-form">
+      <div class="field"><label for="mn-wf">Workflow</label><select id="mn-wf" required></select></div>
+      <div class="field"><label for="mn-org">Org ID</label><input type="text" id="mn-org" spellcheck="false"></div>
+      <div class="field"><label for="mn-title">Title (optional)</label><input type="text" id="mn-title-input" maxlength="200"></div>
+      <div id="mn-inputs"></div>
+      <div class="actions">
+        <button class="btn btn-secondary" type="button" id="mn-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="mn-submit">Start assignment</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ═══════════════════════════════════════════════════════════════════════
+   CAIOS operator console — single-file, no build step.
+   Modes: LIVE (connected to a CAIOS API) and DEMO (clearly-badged synthetic
+   data, read-only). The API contract is the deployed backend: /workflows,
+   /assignments(+approve/cancel), /agents, /documents(+upload),
+   /knowledge/search, /ai/answer, /ai/usage.
+   ═══════════════════════════════════════════════════════════════════════ */
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rel=iso=>{if(!iso)return'';const d=(Date.now()-new Date(iso).getTime())/1e3;
+  if(!isFinite(d)||isNaN(d))return'';if(d<60)return Math.max(1,Math.round(d))+'s ago';
+  if(d<3600)return Math.round(d/60)+'m ago';if(d<86400)return Math.round(d/3600)+'h ago';
+  return new Date(iso).toLocaleDateString('en-ZA',{day:'numeric',month:'short'});};
+
+/* ── Connection config (localStorage; URL params win) ─────────────────── */
+const LS_KEY='caios.conn.v1';
+const CFG={base:'',org:'company',token:'dev'};
+try{Object.assign(CFG,JSON.parse(localStorage.getItem(LS_KEY)||'{}'));}catch(e){}
+const urlp=new URLSearchParams(location.search);
+if(urlp.get('api')!==null){CFG.base=urlp.get('api').trim();CFG.org=urlp.get('org')||'company';
+  CFG.token=urlp.get('token')||'dev';persist();}
+function persist(){localStorage.setItem(LS_KEY,JSON.stringify(CFG));}
+
+/* ── API client ───────────────────────────────────────────────────────── */
+async function api(path,opts={}){
+  if(!CFG.base)throw new Error('Not connected — set an API base in Connection.');
+  const headers=Object.assign({},opts.headers);
+  if(CFG.token)headers.Authorization='Bearer '+CFG.token;
+  if(opts.body&&!(opts.body instanceof FormData))headers['Content-Type']='application/json';
+  let res;
+  try{res=await fetch(CFG.base.replace(/\/+$/,'')+path,Object.assign({},opts,{headers}));}
+  catch(e){throw new Error('Network error — is the API up and CORS configured for this origin?');}
+  if(res.status===401)throw new Error('401 — the API rejected this token.');
+  if(!res.ok){let d='';try{const j=await res.json();d=typeof j.detail==='string'?j.detail:JSON.stringify(j.detail);}catch(e){}
+    throw new Error(res.status+' — '+(d||res.statusText));}
+  return res.status===204?null:res.json();
+}
+
+/* ── State ────────────────────────────────────────────────────────────── */
+const S={live:false,agentsOnline:0,filter:'all',assignments:[],workflows:[],agents:[],
+  usage:null,docs:[],kbstats:null};
+
+/* ── Toast ────────────────────────────────────────────────────────────── */
+let toastT=null;
+function toast(html){const t=$('#toast');t.innerHTML=html;t.classList.add('show');
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3800);}
+function demoGuard(){toast('<b>Demo data</b> — read-only. Connect to an API in Connection to run actions.');}
+function err(id,msg){const b=$(id);if(!b)return;if(msg){b.textContent=msg;b.classList.add('show');}else b.classList.remove('show');}
+
+/* ── Demo data (synthetic, clearly badged, read-only) ─────────────────── */
+const DEMO={
+  kbstats:{documents:8,chunks:132,embedder:{provider:'demo',model:'demo-embed',dimensions:768}},
+  docs:[
+    {id:'d1',title:'VAT-registration-guide.md',scope:'company',status:'indexed',chunk_count:24,mime_type:'text/markdown',updated_at:'2026-11-17T09:12:00Z'},
+    {id:'d2',title:'client-onboarding-checklist.docx',scope:'company',status:'indexed',chunk_count:18,mime_type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',updated_at:'2026-11-16T14:03:00Z'},
+    {id:'d3',title:'maize-market-notes.txt',scope:'client',status:'indexed',chunk_count:31,mime_type:'text/plain',updated_at:'2026-11-15T11:40:00Z'},
+    {id:'d4',title:'fy2025-management-accounts.pdf',scope:'client',status:'extracting',chunk_count:0,mime_type:'application/pdf',updated_at:'2026-11-18T08:01:00Z'}],
+  agents:[
+    {slug:'bi-analytics',name:'Business Intelligence & Performance Analytics Agent',division:'BI & Analytics',
+     responsibilities:['Business data diagnostics & data quality assessments','Revenue, expenditure, sales & inventory analysis','KPI calculations, trend & variance analysis','Performance & management reporting preparation'],
+     permitted_tools:['knowledge.retrieval','model.reasoning'],
+     required_outputs:['Findings with document evidence, then data gaps separately','Figures carry source, period and scope; estimates flagged'],
+     quality_standards:['Numbers over adjectives; provenance on every figure','Verified data vs estimates vs unavailable — never blended'],
+     constraints:['Must not alter original client accounting records','Must not certify financial information'],prompt_name:'agent.bi-analytics'},
+    {slug:'commercial-intelligence',name:'Economic & Commercial Intelligence Agent',division:'Commercial Intelligence',
+     responsibilities:['Competitor, market & industry research','Competitor pricing & supplier cost comparisons','Market opportunity & expansion assessments','Research report preparation'],
+     permitted_tools:['knowledge.retrieval','model.reasoning'],
+     required_outputs:['Source-preserved findings','Verified facts / estimates / assumptions / unavailable — separated'],
+     quality_standards:['Sources preserved on every claim','Unavailable information reported as unavailable'],
+     constraints:['Must not invent sources','Must not present unverified information as fact'],prompt_name:'agent.commercial-intelligence'},
+    {slug:'risk-controls',name:'Operational Risk, Process & Controls Agent',division:'Risk & Controls',
+     responsibilities:['Operational risk identification & register development','Process diagnostics, control-gap identification','SOP drafting & documentation reviews','Improvement recommendations & action plans'],
+     permitted_tools:['knowledge.retrieval','model.reasoning'],
+     required_outputs:['Register-ready entries with likelihood/impact rationale','Evidence trace per entry, or flagged for client confirmation'],
+     quality_standards:['No finding without a basis or a declared observation flag','Recommendations proportionate to org maturity'],
+     constraints:['No legal opinions','No statutory audit opinions','No formal regulatory certifications'],prompt_name:'agent.risk-controls'}],
+  workflows:[
+    {name:'company.knowledge-brief',description:'Knowledge-grounded brief, then human review.',required_inputs:['topic'],
+     steps:[{seq:1,name:'brief',kind:'ai.brief'},{seq:2,name:'review',kind:'gate.review',is_gate:true}]},
+    {name:'client.onboarding-check',description:'Verify the knowledge base is ready for AI work.',required_inputs:[],
+     steps:[{seq:1,name:'index-check',kind:'kb.check'},{seq:2,name:'review',kind:'gate.review',is_gate:true}]},
+    {name:'company.bi-diagnostic',description:'BI & Analytics agent: data & performance diagnostic.',required_inputs:['topic'],
+     steps:[{seq:1,name:'data-intake',kind:'kb.check'},{seq:2,name:'analysis',kind:'agent.task'},{seq:3,name:'review',kind:'gate.review',is_gate:true}]},
+    {name:'client.competitor-scan',description:'Commercial Intelligence agent: competitive research.',required_inputs:['subject'],
+     steps:[{seq:1,name:'research',kind:'agent.task'},{seq:2,name:'review',kind:'gate.review',is_gate:true}]},
+    {name:'client.controls-review',description:'Risk & Controls agent: register-ready controls review.',required_inputs:['process'],
+     steps:[{seq:1,name:'assessment',kind:'agent.task'},{seq:2,name:'review',kind:'gate.review',is_gate:true}]}],
+  assignments:[
+    {id:'a1f4c2d8-7b3e-4c9a-b1f2-000000000001',title:'Competitor scan',workflow:'client.competitor-scan',org_id:'company',
+     status:'awaiting_approval',created_at:'2026-11-18T07:42:00Z',updated_at:'2026-11-18T07:44:10Z',
+     steps:[{seq:1,name:'research',kind:'agent.task',status:'done',params:{agent:'commercial-intelligence',question:'Research maize milling in Limpopo: competitive landscape, pricing comparisons and market positioning.'},
+             output:{agent:{slug:'commercial-intelligence',name:'Economic & Commercial Intelligence Agent',division:'Commercial Intelligence'},answer:'Verified: two dominant millers hold ~64% share [1]. Estimate: entry pricing pressure of 6–8% (assumption).',grounded:true,
+                     citations:[{title:'maize-market-notes.txt',seq:3,distance:0.183}],usage:{model:'deepseek-chat',estimated_cost_usd:0.0021}}},
+            {seq:2,name:'review',kind:'gate.review',status:'awaiting_approval',is_gate:true}],
+     events:[{event:'assignment.created',actor:'ui',at:'2026-11-18T07:42:00Z'},{event:'step.completed',actor:'worker',at:'2026-11-18T07:44:08Z'},{event:'gate.awaiting',actor:'worker',at:'2026-11-18T07:44:10Z'}]},
+    {id:'a1f4c2d8-7b3e-4c9a-b1f2-000000000002',title:'Revenue variance Q3',workflow:'company.bi-diagnostic',org_id:'company',
+     status:'running',created_at:'2026-11-18T09:05:00Z',updated_at:'2026-11-18T09:06:20Z',
+     steps:[{seq:1,name:'data-intake',kind:'kb.check',status:'done',output:{verdict:'ready',chunks:132}},
+            {seq:2,name:'analysis',kind:'agent.task',status:'queued',params:{agent:'bi-analytics',question:'Analyse: Revenue variance Q3.'}},
+            {seq:3,name:'review',kind:'gate.review',status:'pending',is_gate:true}],
+     events:[{event:'assignment.created',actor:'ui',at:'2026-11-18T09:05:00Z'},{event:'step.completed',actor:'worker',at:'2026-11-18T09:06:18Z'}]},
+    {id:'a1f4c2d8-7b3e-4c9a-b1f2-000000000003',title:'Knowledge brief',workflow:'company.knowledge-brief',org_id:'company',
+     status:'completed',created_at:'2026-11-17T10:11:00Z',updated_at:'2026-11-17T10:14:36Z',
+     steps:[{seq:1,name:'brief',kind:'ai.brief',status:'done',params:{question:'Provide a knowledge-grounded brief on: VAT registration.'},
+             output:{answer:'Registration is required once the taxable-supply threshold is exceeded [1].',grounded:true,citations:[{title:'VAT-registration-guide.md',seq:1,distance:0.21}],usage:{model:'deepseek-chat',estimated_cost_usd:0.0014}}},
+            {seq:2,name:'review',kind:'gate.review',status:'done',is_gate:true}],
+     events:[{event:'assignment.created',actor:'ui',at:'2026-11-17T10:11:00Z'},{event:'gate.approved',actor:'operator',at:'2026-11-17T10:14:36Z'}]},
+    {id:'a1f4c2d8-7b3e-4c9a-b1f2-000000000004',title:'Controls review',workflow:'client.controls-review',org_id:'org-client-x',
+     status:'failed',created_at:'2026-11-16T15:30:00Z',updated_at:'2026-11-16T15:31:12Z',
+     steps:[{seq:1,name:'assessment',kind:'agent.task',status:'failed',params:{agent:'risk-controls',question:'Review the accounts payable process.'},error:'empty knowledge base — fail-fast (honest 422-class signal)'}],
+     events:[{event:'assignment.created',actor:'ui',at:'2026-11-16T15:30:00Z'},{event:'step.failed',actor:'worker',at:'2026-11-16T15:31:12Z'}]}],
+  usage:{totals:{calls:47,errors:1,input_tokens:112400,output_tokens:9860,cached_tokens:21400,estimated_cost_usd:0.0942,duration_ms:96400},
+         by_model:[{model:'deepseek-chat',calls:41,input_tokens:98800,output_tokens:8120,estimated_cost_usd:0.0781},
+                   {model:'demo-embed',calls:6,input_tokens:13600,output_tokens:1740,estimated_cost_usd:0.0161}]}
+};
+
+/* ── Loaders ──────────────────────────────────────────────────────────── */
+async function loadAll(){
+  err('#ov-err',0);err('#asg-err',0);err('#ag-err',0);err('#wf-err',0);err('#us-err',0);err('#kb-err',0);
+  const jobs=[
+    loadAssignments(),loadWorkflows(),loadAgents(),loadUsage(),loadDocs()];
+  await Promise.allSettled(jobs);
+  renderBadge();route(true);
+}
+async function loadAssignments(){
+  if(!S.live){S.assignments=DEMO.assignments;return;}
+  const j=await api('/assignments?org_id='+encodeURIComponent(CFG.org)+'&limit=50');
+  S.assignments=j.assignments||[];
+}
+async function loadWorkflows(){
+  if(!S.live){S.workflows=DEMO.workflows;return;}
+  const j=await api('/workflows');S.workflows=j.workflows||[];
+}
+async function loadAgents(){
+  if(!S.live){S.agents=DEMO.agents;S.agentsOnline=DEMO.agents.length;return;}
+  const j=await api('/agents');S.agents=j.agents||[];S.agentsOnline=j.count||S.agents.length;
+}
+async function loadUsage(){
+  if(!S.live){S.usage=DEMO.usage;return;}
+  S.usage=await api('/ai/usage?org_id='+encodeURIComponent(CFG.org)+'&days=30');
+}
+async function loadDocs(){
+  if(!S.live){S.docs=DEMO.docs;S.kbstats=DEMO.kbstats;return;}
+  const j=await api('/documents?org_id='+encodeURIComponent(CFG.org)+'&limit=50');
+  S.docs=j.documents||[];
+  try{S.kbstats=await api('/knowledge/stats?org_id='+encodeURIComponent(CFG.org));}catch(e){S.kbstats=null;}
+}
+/* ── Badge / chips ────────────────────────────────────────────────────── */
+function setLive(t){$('#live-label').textContent=t;}
+function renderBadge(){
+  $('#org-chip').textContent='org: '+(CFG.org||'—');
+  const chip=$('#env-chip'),live=$('#live'),foot=$('#foot-note');
+  if(S.live){chip.textContent='LIVE';chip.className='env-chip on';live.className='live on';
+    setLive('LIVE · '+CFG.base.replace(/^https?:\/\//,''));
+    foot.textContent='API: '+CFG.base+' · '+S.agentsOnline+' agents online';}
+  else{chip.textContent='DEMO DATA';chip.className='env-chip off';live.className='live off';
+    setLive('API not connected');foot.textContent='Synthetic demo data — read-only';}
+}
+
+/* ── Status pills ─────────────────────────────────────────────────────── */
+const PILL={running:['progress','RUNNING'],awaiting_approval:['pending','AWAITING APPROVAL'],
+  completed:['ok','COMPLETED'],cancelled:['muted','CANCELLED'],failed:['error','FAILED'],
+  queued:['muted','QUEUED'],pending:['muted','PENDING'],done:['ok','DONE'],
+  skipped:['muted','SKIPPED'],extracting:['progress','EXTRACTING'],indexed:['ok','INDEXED'],
+  failed_doc:['error','FAILED'],extracted:['progress','EXTRACTED'],uploaded:['muted','UPLOADED']};
+const pill=(st,extra)=>{const m=PILL[st]||['muted',String(st||'—').toUpperCase()];
+  return '<span class="pill '+m[0]+'">'+esc(extra||m[1])+'</span>';};
+
+/* ── Router ───────────────────────────────────────────────────────────── */
+const CRUMB={overview:'Overview',assignments:'Assignments',assignment:'Assignment detail',
+  knowledge:'Knowledge base',agents:'Specialist agents',ai:'AI console',
+  usage:'Usage & spend',workflows:'Workflows',connection:'Connection'};
+const RENDER={overview:renderOverview,assignments:renderAssignments,knowledge:renderKnowledge,
+  agents:renderAgents,usage:renderUsage,workflows:renderWorkflows,connection:renderConnection};
+function route(silent){
+  const h=location.hash.replace(/^#\/?/,'');const seg=h.split('/');
+  const view=seg[0]||'overview';
+  if(view==='assignments'&&seg[1])return showView('assignment',seg[1]);
+  showView(view);
+}
+function showView(view,param){
+  $$('.view').forEach(x=>x.classList.remove('active'));
+  const el=$('#view-'+view);
+  if(!el){location.hash='#/overview';return;}
+  el.classList.add('active');
+  $$('.nav-item').forEach(b=>b.classList.toggle('active',
+    b.dataset.view===view||(view==='assignment'&&b.dataset.view==='assignments')));
+  $('#crumb').textContent=CRUMB[view]||'CAIOS';
+  if(view==='assignment')renderAssignmentDetail(param);
+  else if(RENDER[view])RENDER[view]();
+}
+
+/* ── Overview ─────────────────────────────────────────────────────────── */
+function renderOverview(){
+  const asg=S.assignments,t=S.usage&&S.usage.totals||{};
+  const active=asg.filter(a=>a.status==='running').length;
+  const waiting=asg.filter(a=>a.status==='awaiting_approval').length;
+  const indexed=(S.kbstats&&S.kbstats.documents!=null)?S.kbstats.documents:
+    S.docs.filter(d=>d.status==='indexed').length;
+  $('#ov-stats').innerHTML=[
+    ['Active assignments',active,asg.length+' total'],
+    ['Awaiting approval',waiting,'gates need a human decision'],
+    ['Docs indexed',indexed,(S.kbstats&&S.kbstats.chunks||0)+' chunks in index'],
+    ['AI spend — 30 d','$'+(t.estimated_cost_usd||0).toFixed(2),(t.calls||0)+' model calls'+(t.errors?(' · '+t.errors+' errored'):'')]
+  ].map(s=>'<div class="stat"><div class="label">'+s[0]+'</div><div class="value">'+s[1]+'</div><div class="delta">'+esc(s[2])+'</div></div>').join('');
+  const recent=[...asg].sort((a,b)=>String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||''))).slice(0,6);
+  $('#ov-assignments').innerHTML=asgTable(recent,true);
+  $('#ov-agents-sub').textContent=S.agentsOnline+' online in the registry';
+  $('#ov-agents').innerHTML=(S.agents.length?S.agents:[]).map(a=>
+    '<div class="feed-item"><p><span class="evt">'+esc(a.division)+'</span> — '+esc(a.name)+
+    '</p><time>'+esc(a.slug)+'</time></div>').join('')||'<div class="empty">Registry empty</div>';
+  const emb=S.kbstats&&S.kbstats.embedder;
+  $('#ov-kb').innerHTML=
+    '<div class="feed-item"><p><span class="evt">'+indexed+' documents</span> indexed · '+
+    (S.kbstats&&S.kbstats.chunks||0)+' chunks</p></div>'+
+    (emb?'<div class="feed-item"><p><span class="evt">Embedder</span> '+esc(emb.provider)+' · '+esc(emb.model)+' · '+esc(emb.dimensions)+' dims</p><time>TV-019 pinned</time></div>':'');
+}
+
+/* ── Assignments list ─────────────────────────────────────────────────── */
+const FILTERS=[['all','All'],['running','Running'],['awaiting_approval','Awaiting approval'],
+  ['completed','Completed'],['cancelled','Cancelled'],['failed','Failed']];
+function renderAssignments(){
+  $('#asg-filters').innerHTML=FILTERS.map(f=>
+    '<button class="chip'+(S.filter===f[0]?' active':'')+'" data-filter="'+f[0]+'">'+f[1]+'</button>').join('');
+  const rows=S.filter==='all'?S.assignments:S.assignments.filter(a=>a.status===S.filter);
+  $('#asg-table').innerHTML=asgTable(rows,false);
+}
+function asgTable(rows,compact){
+  if(!rows.length)return '<div class="empty">No assignments in this view — start one from Workflows.</div>';
+  return '<table><thead><tr><th>Assignment</th><th>Workflow</th><th>Status</th><th>Updated</th></tr></thead><tbody>'+
+    rows.map(a=>'<tr class="rowlink" data-href="#/assignments/'+esc(a.id)+'">'+
+      '<td class="cell-title"><b>'+esc(a.title||a.workflow)+'</b><span>'+
+      esc(String(a.id).slice(0,8).toUpperCase())+' · org '+esc(a.org_id||CFG.org)+'</span></td>'+
+      '<td>'+esc(a.workflow)+'</td><td>'+pill(a.status)+'</td>'+
+      '<td>'+esc(rel(a.updated_at||a.created_at))+'</td></tr>').join('')+'</tbody></table>';
+}
+
+/* ── Assignment detail ────────────────────────────────────────────────── */
+async function renderAssignmentDetail(id){
+  const el=$('#asg-detail');
+  el.innerHTML='<div class="card"><div class="empty">Loading assignment…</div></div>';
+  let a;
+  try{
+    a=S.live?await api('/assignments/'+encodeURIComponent(id)+'?org_id='+encodeURIComponent(CFG.org))
+            :S.assignments.find(x=>x.id===id);
+    if(!a)throw new Error(S.live?'Assignment not found in this org.':'Not in demo data.');
+  }catch(e){
+    el.innerHTML='<div class="card"><h2>Assignment unavailable</h2><div class="card-sub">'+esc(e.message)+
+      '</div><a class="btn btn-secondary" href="#/assignments">← Back to assignments</a></div>';return;
+  }
+  const canApprove=S.live&&a.status==='awaiting_approval';
+  const canCancel=S.live&&!['completed','cancelled','failed'].includes(a.status);
+  const stepBlock=s=>{
+    let html='<div class="card" style="margin-top:16px"><div class="row-between">'+
+      '<h2 style="margin:0">Step '+s.seq+' — '+esc(s.name)+' <span class="tagline">'+esc(s.kind)+
+      (s.is_gate?' · gate':'')+'</span></h2>'+pill(s.status)+'</div>';
+    const q=s.params&&s.params.question;
+    if(q)html+='<p class="hint" style="margin-top:10px"><b>Question:</b> '+esc(q)+'</p>';
+    if(s.params&&s.params.agent)html+='<p class="hint">Agent: <b>'+esc(s.params.agent)+'</b></p>';
+    const o=s.output;
+    if(o&&o.agent)html+='<p class="hint" style="margin-top:8px">Produced by <b>'+esc(o.agent.name)+
+      '</b> · '+esc(o.agent.division)+' ('+esc(o.agent.slug)+')</p>';
+    if(o&&o.answer)html+='<div class="answer" style="margin-top:10px">'+esc(o.answer)+'</div>';
+    if(o&&o.verdict)html+='<p class="hint" style="margin-top:8px">Verdict: <b>'+esc(o.verdict)+
+      '</b>'+(o.chunks!=null?' · '+esc(o.chunks)+' chunks':'')+'</p>';
+    if(o&&o.grounded!==undefined){
+      html+='<p style="margin-top:10px">'+(o.grounded?'<span class="pill ok">GROUNDED</span>':
+        '<span class="pill pending">NOT GROUNDED — no chunks retrieved</span>')+'</p>';
+      const cs=o.citations||[];
+      if(cs.length)html+='<div class="citations">'+cs.map(c=>'<div class="cite"><b>['+(c.seq!=null?c.seq:'·')+'] '+
+        esc(c.title||c.document_id||'')+'</b> '+(c.distance!=null?'· distance '+esc(Number(c.distance).toFixed(3)):'')+
+        '</div>').join('')+'</div>';
+    }
+    if(o&&o.usage&&o.usage.model)html+='<p class="usage-line">'+esc(o.usage.model)+' · est. cost $'+
+      Number(o.usage.estimated_cost_usd||0).toFixed(5)+'</p>';
+    if(s.error)html+='<div class="errbox show" style="margin-top:10px">'+esc(s.error)+'</div>';
+    return html+'</div>';
+  };
+  el.innerHTML=
+    '<div class="row-between"><div><h1 class="page-title">'+esc(a.title||a.workflow)+'</h1>'+
+    '<p class="page-sub">'+esc(a.workflow)+' · '+esc(String(a.id).slice(0,8).toUpperCase())+
+    ' · org '+esc(a.org_id||CFG.org)+' · started '+esc(rel(a.created_at))+'</p></div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+pill(a.status)+
+    (canApprove?'<button class="btn btn-green" id="asg-approve">Approve gate</button>':'')+
+    (canCancel?'<button class="btn btn-danger" id="asg-cancel">Cancel</button>':'')+
+    '<a class="btn btn-secondary" href="#/assignments">← Back</a></div></div>'+
+    (a.steps&&a.steps.length?'<div class="flow section-gap">'+a.steps.map((s,i)=>
+      (i?'<span class="arrow">→</span>':'')+'<span class="state '+
+      (s.status==='done'?'done':s.status==='failed'?'err':(s.status==='running'||s.status==='queued')?'now':'')+
+      '">'+esc(s.name)+(s.is_gate?' ⛨':'')+'</span>').join('')+'</div>':'')+
+    a.steps.map(stepBlock).join('')+
+    '<div class="card section-gap"><h2>Event trail (§13 — append-only)</h2>'+
+    '<div class="feed">'+((a.events||[]).map(e=>'<div class="feed-item"><p><span class="evt">'+esc(e.event)+
+      '</span>'+(e.detail?' — '+esc(e.detail):'')+(e.actor?' <span class="hint">by '+esc(e.actor)+'</span>':'')+
+      '</p><time>'+esc(rel(e.at||e.created_at))+'</time></div>').join('')||'<div class="empty">No events</div>')+
+    '</div></div>';
+  const ap=$('#asg-approve');
+  if(ap)ap.addEventListener('click',async()=>{
+    const note=prompt('Approval note (recorded on the gate):','Reviewed — accepted')??null;
+    if(note===null)return;
+    try{await api('/assignments/'+encodeURIComponent(a.id)+'/approve',
+      {method:'POST',body:JSON.stringify({org_id:CFG.org,note})});
+      toast('<b>Gate approved</b> — assignment completed.');
+      await loadAssignments();renderAssignmentDetail(a.id);}
+    catch(e){toast('Approve failed: '+esc(e.message));}});
+  const cn=$('#asg-cancel');
+  if(cn)cn.addEventListener('click',async()=>{
+    const reason=prompt('Cancellation reason (append-only trail):','Re-scoped')??null;
+    if(reason===null)return;
+    try{await api('/assignments/'+encodeURIComponent(a.id)+'/cancel',
+      {method:'POST',body:JSON.stringify({org_id:CFG.org,reason})});
+      toast('<b>Cancelled</b> — terminal state recorded.');
+      await loadAssignments();renderAssignmentDetail(a.id);}
+    catch(e){toast('Cancel failed: '+esc(e.message));}});
+}
+/* ── Agents ───────────────────────────────────────────────────────────── */
+const WF_FOR_AGENT={'bi-analytics':'company.bi-diagnostic',
+  'commercial-intelligence':'client.competitor-scan','risk-controls':'client.controls-review'};
+function renderAgents(){
+  $('#agent-cards').innerHTML=S.agents.map(a=>{
+    const wf=WF_FOR_AGENT[a.slug]||'';
+    const start=wf?'<button class="btn btn-primary" data-startwf="'+esc(wf)+'" style="margin-top:16px">Start '+esc(wf)+'</button>':'';
+    return '<div class="card agent-card"><span class="div-tag">'+esc(a.division)+'</span>'+
+      '<h3>'+esc(a.name)+'</h3><p class="hint">slug: '+esc(a.slug)+' · prompt override: '+esc(a.prompt_name||('agent.'+a.slug))+'</p>'+
+      '<div class="duty"><h4>Responsibilities</h4><ul>'+a.responsibilities.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></div>'+
+      '<div class="duty"><h4>Permitted tools</h4><ul>'+a.permitted_tools.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul></div>'+
+      '<div class="duty"><h4>Required outputs</h4><ul>'+a.required_outputs.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></div>'+
+      '<div class="duty"><h4>Quality standards</h4><ul>'+a.quality_standards.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></div>'+
+      '<div class="duty"><h4>Constraints — never violated</h4><ul>'+a.constraints.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></div>'+
+      start+'</div>';}).join('')||'<div class="card"><div class="empty">Registry unavailable</div></div>';
+}
+
+/* ── Knowledge ────────────────────────────────────────────────────────── */
+function renderKnowledge(){
+  $('#kb-docs-sub').textContent=S.docs.length+' documents · '+
+    (S.kbstats&&S.kbstats.chunks||0)+' chunks in index';
+  $('#kb-docs').innerHTML=S.docs.length?
+    '<table><thead><tr><th>Document</th><th>Scope</th><th>Status</th><th class="num">Chunks</th><th>Updated</th></tr></thead><tbody>'+
+    S.docs.map(d=>'<tr><td class="cell-title"><b>'+esc(d.title||d.id)+'</b><span>'+
+      esc(d.mime_type||'')+'</span></td><td>'+esc(d.scope||'')+'</td><td>'+
+      pill(d.status==='failed'?'failed_doc':d.status)+'</td><td class="num">'+
+      esc(d.chunk_count!=null?d.chunk_count:0)+'</td><td>'+esc(rel(d.updated_at||d.uploaded_at||d.created_at))+
+      '</td></tr>').join('')+'</tbody></table>'
+    :'<div class="empty">No documents yet — upload one on the right.</div>';
+}
+
+/* ── Usage ────────────────────────────────────────────────────────────── */
+function renderUsage(){
+  const t=(S.usage&&S.usage.totals)||{};
+  const tiles=[['Model calls — 30 d',t.calls||0,(t.errors||0)+' errored'],
+    ['Estimated spend','$'+Number(t.estimated_cost_usd||0).toFixed(4),'conservative peak pricing'],
+    ['Tokens in',Number(t.input_tokens||0).toLocaleString('en-ZA'),'· '+Number(t.cached_tokens||0).toLocaleString('en-ZA')+' cached'],
+    ['Tokens out',Number(t.output_tokens||0).toLocaleString('en-ZA'),'every call ledgered (§20)']];
+  $('#us-stats').innerHTML=tiles.map(s=>'<div class="stat"><div class="label">'+s[0]+
+    '</div><div class="value">'+s[1]+'</div><div class="delta">'+esc(s[2])+'</div></div>').join('');
+  const rows=(S.usage&&S.usage.by_model)||[];
+  $('#us-models').innerHTML=rows.length?
+    '<table><thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Tokens in</th><th class="num">Tokens out</th><th class="num">Est. cost</th></tr></thead><tbody>'+
+    rows.map(m=>'<tr><td>'+esc(m.model||m.provider||'—')+'</td><td class="num">'+esc(m.calls||0)+
+      '</td><td class="num">'+Number(m.input_tokens||0).toLocaleString('en-ZA')+'</td><td class="num">'+
+      Number(m.output_tokens||0).toLocaleString('en-ZA')+'</td><td class="num">$'+
+      Number(m.estimated_cost_usd||0).toFixed(4)+'</td></tr>').join('')+'</tbody></table>'
+    :'<div class="empty">No usage recorded in this window.</div>';
+}
+
+/* ── Workflows ────────────────────────────────────────────────────────── */
+function renderWorkflows(){
+  $('#wf-cards').innerHTML=S.workflows.map(w=>
+    '<div class="card"><div class="row-between"><h2 style="margin:0">'+esc(w.name)+'</h2>'+
+    '<button class="btn btn-primary" data-startwf="'+esc(w.name)+'">Start</button></div>'+
+    '<p class="hint" style="margin-top:6px">'+esc(w.description||'')+'</p>'+
+    '<div class="flow">'+w.steps.map((s,i)=>(i?'<span class="arrow">→</span>':'')+
+      '<span class="state">'+esc(s.kind)+(s.is_gate?' ⛨':'')+'</span>').join('')+'</div>'+
+    '<p class="hint">Required inputs: '+(w.required_inputs.length?
+      w.required_inputs.map(i=>'<b>'+esc(i)+'</b>').join(', '):'none')+'</p></div>').join('')||
+    '<div class="card"><div class="empty">Workflow registry unavailable</div></div>';
+}
+
+/* ── Connection ───────────────────────────────────────────────────────── */
+function renderConnection(){
+  $('#cn-status').innerHTML=S.live?
+    '<span class="live on" style="color:var(--green-text)"><span class="pulse"></span>LIVE — connected to '+
+    esc(CFG.base)+'</span>':
+    '<span class="live off" style="color:var(--text-muted)"><span class="pulse"></span>Not connected — demo data</span>';
+  $('#cn-base').value=CFG.base||'';$('#cn-org').value=CFG.org||'company';
+  $('#cn-token').value=CFG.token||'';
+}
+
+/* ── New assignment modal ─────────────────────────────────────────────── */
+function renderWfInputs(){
+  const w=S.workflows.find(x=>x.name===$('#mn-wf').value);
+  $('#mn-inputs').innerHTML=(w&&w.required_inputs||[]).map(k=>
+    '<div class="field"><label for="mn-in-'+esc(k)+'">'+esc(k)+' <span class="hint">(required)</span></label>'+
+    '<input type="text" id="mn-in-'+esc(k)+'" data-key="'+esc(k)+'" required></div>').join('');
+}
+function openModal(wf){
+  if(!S.live)return demoGuard();
+  $('#mn-wf').innerHTML=S.workflows.map(w=>'<option value="'+esc(w.name)+'">'+esc(w.name)+'</option>').join('');
+  if(wf)$('#mn-wf').value=wf;
+  $('#mn-org').value=CFG.org;$('#mn-title-input').value='';
+  renderWfInputs();$('#modal-new').classList.add('show');
+  ($('#mn-inputs input')||$('#mn-wf')).focus();
+}
+$('#btn-new').addEventListener('click',()=>openModal());
+$('#btn-new-2').addEventListener('click',()=>openModal());
+$('#mn-cancel').addEventListener('click',()=>$('#modal-new').classList.remove('show'));
+$('#mn-wf').addEventListener('change',renderWfInputs);
+$('#mn-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!S.live)return demoGuard();
+  const inputs={};$$('#mn-inputs input').forEach(i=>inputs[i.dataset.key]=i.value.trim());
+  const body={org_id:($('#mn-org').value.trim()||CFG.org),workflow:$('#mn-wf').value,inputs};
+  const t=$('#mn-title-input').value.trim();if(t)body.title=t;
+  $('#mn-submit').disabled=true;
+  try{const j=await api('/assignments',{method:'POST',body:JSON.stringify(body)});
+    $('#modal-new').classList.remove('show');
+    toast('<b>Assignment started</b> — steps planned concretely, first step queued.');
+    await loadAssignments();location.hash='#/assignments/'+j.id;route(true);}
+  catch(ex){toast('<b>Start failed</b> — '+esc(ex.message));}
+  $('#mn-submit').disabled=false;
+});
+
+/* ── Knowledge: upload + search ───────────────────────────────────────── */
+$('#kb-upload').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!S.live)return demoGuard();
+  const f=$('#up-file').files[0];
+  if(!f)return toast('Choose a file first.');
+  const fd=new FormData();
+  fd.append('org_id',CFG.org);fd.append('scope',$('#up-scope').value);
+  const t=$('#up-title').value.trim();if(t)fd.append('title',t);
+  fd.append('file',f,f.name);
+  $('#up-btn').disabled=true;
+  try{const j=await api('/documents/upload',{method:'POST',body:fd});
+    toast('<b>Upload accepted (202)</b> — extraction queued. Refresh in a few seconds.');
+    await loadDocs();renderKnowledge();}
+  catch(ex){toast('<b>Upload failed</b> — '+esc(ex.message));}
+  $('#up-btn').disabled=false;
+});
+$('#kb-search-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!S.live)return demoGuard();
+  const q=$('#kb-q').value.trim();if(!q)return;
+  const box=$('#kb-results');box.innerHTML='<p class="hint">Searching…</p>';
+  try{const j=await api('/knowledge/search',{method:'POST',body:JSON.stringify({org_id:CFG.org,query:q,top_k:6})});
+    const rs=j.results||[];
+    box.innerHTML=(rs.length?'<h2 style="font-size:14px">'+rs.length+' match'+(rs.length===1?'':'es')+'</h2>'+
+      '<div class="citations">'+rs.map((r,i)=>'<div class="cite"><b>['+(i+1)+'] '+esc(r.title||r.document_id)+
+      (r.seq!=null?' · chunk '+r.seq:'')+'</b>'+(r.distance!=null?' · distance '+Number(r.distance).toFixed(3):'')+
+      (r.text?'<br>'+esc(String(r.text).slice(0,220))+(String(r.text).length>220?'…':''):'')+'</div>').join('')+'</div>':
+      '<p class="hint">No matches.'+(j.hint?' '+esc(j.hint):'')+'</p>');}
+  catch(ex){box.innerHTML='<div class="errbox show">'+esc(ex.message)+'</div>';}
+});
+
+/* ── AI console ───────────────────────────────────────────────────────── */
+$('#ai-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!S.live)return demoGuard();
+  const q=$('#ai-q').value.trim();if(!q)return;
+  const box=$('#ai-answer');$('#ai-btn').disabled=true;
+  box.innerHTML='<p class="hint">Retrieving → rendering template → model call → ledger row…</p>';
+  try{const j=await api('/ai/answer',{method:'POST',body:JSON.stringify({org_id:CFG.org,question:q})});
+    const cs=j.citations||[];
+    box.innerHTML='<div class="row-between" style="margin-bottom:10px">'+
+      (j.grounded?'<span class="pill ok">GROUNDED</span>':'<span class="pill pending">NOT GROUNDED</span>')+
+      '<span class="hint">'+esc((j.prompt&&j.prompt.name)||'')+' v'+esc((j.prompt&&j.prompt.version)||'—')+
+      ' · '+esc((j.usage&&j.usage.model)||'')+' · $'+Number((j.usage&&j.usage.estimated_cost_usd)||0).toFixed(5)+
+      (j.retrieval&&j.retrieval.chunks_in_index!=null?' · index: '+esc(j.retrieval.chunks_in_index)+' chunks':'')+
+      '</span></div><div class="answer">'+esc(j.answer||'')+'</div>'+
+      (cs.length?'<div class="citations">'+cs.map(c=>'<div class="cite"><b>['+(c.seq!=null?c.seq:'·')+'] '+
+        esc(c.title||c.document_id||'')+'</b>'+(c.distance!=null?' · distance '+Number(c.distance).toFixed(3):'')+
+        '</div>').join('')+'</div>':'')+
+      (j.retrieval&&j.retrieval.hint?'<p class="hint" style="margin-top:10px">'+esc(j.retrieval.hint)+'</p>':'');
+  }catch(ex){box.innerHTML='<div class="errbox show">'+esc(ex.message)+'</div>';}
+  $('#ai-btn').disabled=false;
+});
+
+/* ── Connection form ──────────────────────────────────────────────────── */
+$('#cn-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  CFG.base=$('#cn-base').value.trim().replace(/\/+$/,'');
+  CFG.org=$('#cn-org').value.trim()||'company';
+  CFG.token=$('#cn-token').value;persist();
+  $('#cn-test').disabled=true;setLive('Checking API…');
+  if(!CFG.base){S.live=false;renderBadge();await loadAll();route(true);$('#cn-test').disabled=false;
+    toast('Disconnected — demo data active.');return;}
+  try{await api('/health');toast('<b>Connected</b> — loading live data…');
+    S.live=false;await boot(true);}
+  catch(ex){toast('<b>Could not connect</b> — '+esc(ex.message)+' (staying on demo data)');}
+  $('#cn-test').disabled=false;renderConnection();
+});
+$('#cn-clear').addEventListener('click',async()=>{
+  CFG.base='';CFG.token='';persist();
+  S.live=false;renderBadge();await loadAll();route(true);renderConnection();
+  toast('Disconnected — demo data active.');
+});
+
+/* ── Delegated clicks: rows, filters, start-workflow ──────────────────── */
+document.addEventListener('click',e=>{
+  const link=e.target.closest('[data-href]');
+  if(link){location.hash=link.dataset.href;return;}
+  const chip=e.target.closest('[data-filter]');
+  if(chip){S.filter=chip.dataset.filter;renderAssignments();return;}
+  const start=e.target.closest('[data-startwf]');
+  if(start){openModal(start.dataset.startwf);return;}
+  if(e.target.classList.contains('overlay'))e.target.classList.remove('show');
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')$('#modal-new').classList.remove('show');});
+window.addEventListener('hashchange',()=>route(true));
+
+/* ── Boot ─────────────────────────────────────────────────────────────── */
+async function boot(quiet){
+  renderBadge();
+  if(CFG.base){
+    if(!quiet)setLive('Checking API…');
+    try{await api('/health');S.live=true;
+      if(!quiet)toast('<b>Live mode</b> — real data from '+esc(CFG.base));
+      await loadAll();}
+    catch(e){S.live=false;
+      if(!quiet)toast('<b>API unreachable</b> — staying on demo data. '+esc(e.message));
+      await loadAll();renderBadge();}
+  }else{S.live=false;await loadAll();}
+  renderBadge();route(true);
+}
+boot();
+</script>
+</body>
+</html>

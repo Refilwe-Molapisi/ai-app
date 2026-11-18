@@ -80,10 +80,12 @@ def create_app() -> FastAPI:
 
     # CORS: explicit allow-list; never wildcard when credentials are involved.
     # "null" covers the single-file UI prototype opened from file:// in dev —
-    # production origins are configured, never wildcards.
-    allowed = [o for o in [
-        "http://localhost:3000", "http://127.0.0.1:3000", "null",
-    ] if not settings.is_production]
+    # production origins come from CORS_ORIGINS (e.g. the Vercel domain),
+    # configured, never wildcards.
+    allowed = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    if not settings.is_production:
+        allowed += ["http://localhost:3000", "http://127.0.0.1:3000", "null",
+                    "http://localhost:8000", "http://127.0.0.1:8000"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed,
