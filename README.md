@@ -6,7 +6,8 @@ identity. This repository covers the **Phases 0–4 foundations**, **Phase 2
 (knowledge & document ingestion)**, **Phase 3 (AI integration)**, **Phase 4
 (central coordination)**, **Phase 5 (specialist agents)**, **Phase 6
 (deliverables & document generation)**, **Phase 7 (QA governance)**, **Phase 8
-(internal ops)** and the **production operator frontend (Vercel)**: documents
+(internal ops)**, **Phase 9 (deployment)** and the **production operator
+frontend (Vercel)**: documents
 upload → extraction → chunking → embeddings (pgvector) → org-scoped retrieval →
 grounded answers with citations, with versioned prompt templates, a full AI
 usage ledger, an assignment/workflow engine with human approval gates, an
@@ -37,10 +38,11 @@ caios/
 │   ├── 08-frontend.md               ← production frontend + Vercel deployment notes (CAIOS-FE-001)
 │   ├── 09-deliverables.md           ← Phase 6 implementation notes (CAIOS-DEL-001)
 │   ├── 10-qa.md                     ← Phase 7 implementation notes (CAIOS-QA-001)
-│   └── 11-ops.md                    ← Phase 8 implementation notes (CAIOS-OPS-001)
+│   ├── 11-ops.md                    ← Phase 8 implementation notes (CAIOS-OPS-001)
+│   └── 12-deployment.md             ← Phase 9 runbook (CAIOS-DEPLOY-001): live Pages URL, Render steps, smoke checklist
 ├── infra/
 │   ├── docker-compose.yml           ← Layer 1: local stack (API + worker + Postgres/pgvector)
-│   ├── render.yaml                  ← Layer 2: Render free blueprint
+│   ├── render.yaml                  ← Layer 2: Render free blueprint — API web service + queue worker
 │   └── .env.example                 ← every variable, with staging/prod notes
 ├── .github/workflows/
 │   ├── backup-supabase.yml          ← daily encrypted pg_dump → Cloudflare R2 (TV-011/020)
@@ -60,10 +62,12 @@ caios/
 │   ├── app/ops/                     ← Phase 8: team roster (four §11 desks), ops trail, workflow→division allocation, cross-module ops overview
 │   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows, /agents, /deliverables (+ QA/revise/versions), /ops
 │   ├── tests/                       ← unit tests + real-Postgres integration harness
+│   ├── scripts/apply_schemas.py     ← idempotent migration runner (all six schemas, dependency order)
 │   └── Dockerfile                   ← same image for local, Render and the future VPS
 ├── frontend/                        ← production operator console (Vercel Root Directory; no build step)
 │   ├── index.html                   ← single-file app: overview, assignments+gates, knowledge, agents, AI console, usage, internal ops, connection
 │   └── vercel.json                  ← static preset, security headers, cleanUrls
+├── gh-pages branch                  ← LIVE deployment of the console: https://refilwe-molapisi.github.io/ai-app/
 └── prototype/
     └── caios-ui.html                ← single-file UI prototype; live-API layer (LIVE/DEMO badges)
 ```
@@ -202,7 +206,8 @@ Full notes: `docs/08-frontend.md` (CAIOS-FE-001).
 | 6 — Deliverables & document generation | Structured spec → deterministic artefact: `.md/.docx/.xlsx/.pdf` builders with provenance footers; `report.generate` on the queue (fulfils the runner's Phase 6 TODO); `/deliverables` + authorised streaming downloads; append-only artefact trail; formula-injection + PDF render guards; `STORAGE_LOCAL_DIR` dev adapter; frontend Deliverables view + AI-answer export — **done** (see docs/09) |
 | 7 — QA governance | QA gate on every deliverable (`draft → in_review → approved \| changes_requested`, reviewer from the verified principal, checklist + mandatory change comments); revisions as new spec versions with the gate reset; immutable `deliverable_versions` history under versioned storage keys; checksum-drift rule voids approval when approved bytes ever change; frontend QA column, decision modal, revise mode, version history — **done** (see docs/10) |
 | 8 — Internal ops | Team roster for the four §11 desks (three agent divisions + Governance & Operations) with an append-only roster trail; workflow→division allocation asserted against the registry by unit tests; `/ops/overview` honest cross-module rollup (roster, open workload per division, queue health, deliverable QA states, AI ledger); frontend Internal Ops view — **done** (see docs/11) |
-| 9–10 | Not started (deployment, continuous dev) |
+| 9 — Deployment | Operator console **live on GitHub Pages** (auto-built from `gh-pages`, verified in Chromium); backend deploy-ready via the Render blueprint (`infra/render.yaml`: API web service + queue worker, Frankfurt free tier) and the idempotent `apply_schemas.py` migration runner; production posture proven against a real server process: boot refused without Supabase auth, dev-bearer shortcut gone (401), CORS allow-list echoes allowed origins only; runbook + smoke checklist in docs/12 — **done** |
+| 10 | Not started (continuous dev) |
 
 ## Verification already performed
 
@@ -258,6 +263,11 @@ PostgreSQL 16 + pgvector (user-space via `pgserver`, or any `DATABASE_URL`):
   division 422s), trailed PATCHes with principal provenance, deactivation,
   member events, the overview rollup counting seeded rows per division and
   cross-org empties/404s (19/19).
+- **Phase 9 deployment**: console live at
+  https://refilwe-molapisi.github.io/ai-app/ (verified in Chromium, demo
+  mode by design); integration_phase9 proves the production posture on a
+  real uvicorn process — migrations idempotent ×2, boot refused without
+  auth, garbage token → 401, CORS allow-list exact (12/12).
 - **Production frontend** verified in headless Chromium against a real API +
   PG16: LIVE connect with `?api=&org=&token=`, gate **approve through the UI**
   (prompt-dialog note → COMPLETED, 7 trail events), **start assignment from an

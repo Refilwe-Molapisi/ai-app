@@ -15,8 +15,14 @@ services:
       - "5432:5432"
     volumes:
       - caios_pgdata:/var/lib/postgresql/data
+      # All six module schemas, applied once on first boot (dependency order;
+      # every file is idempotent — re-running is safe, see backend/scripts/apply_schemas.py)
       - ../backend/app/jobs/schema.sql:/docker-entrypoint-initdb.d/01-jobs-schema.sql:ro
       - ../backend/app/knowledge/schema.sql:/docker-entrypoint-initdb.d/02-knowledge-schema.sql:ro
+      - ../backend/app/ai/schema.sql:/docker-entrypoint-initdb.d/03-ai-schema.sql:ro
+      - ../backend/app/coordination/schema.sql:/docker-entrypoint-initdb.d/04-coordination-schema.sql:ro
+      - ../backend/app/deliverables/schema.sql:/docker-entrypoint-initdb.d/05-deliverables-schema.sql:ro
+      - ../backend/app/ops/schema.sql:/docker-entrypoint-initdb.d/06-ops-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${LOCAL_DB_USER:-caios} -d ${LOCAL_DB_NAME:-caios}"]
       interval: 5s
