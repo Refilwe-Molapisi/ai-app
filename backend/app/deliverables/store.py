@@ -100,6 +100,90 @@ class DeliverableStore:
                 (did, event, actor, detail),
             )
 
+    # -- QA governance (Phase 7, CAIOS-QA-001) ---------------------------------
+    @translate_db_errors
+    def set_qa(self, did: uuid.UUID, *, qa_state: str, reviewer: str,
+               comment: str | None = None, checks: dict | None = None) -> dict | None:
+        """One transaction per QA decision — reviewer, comment and checklist land
+        atomically with the state change (a decision without its provenance is
+        not a decision), and the current version's record carries the same
+        qa_state so "which artefact version is approved" stays queryable."""
+        with self._pool.connection() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    """UPDATE deliverables SET
+                         qa_state = %s, qa_reviewer = %s, qa_comment = %s,
+                         qa_checks = %s, qa_decided_at = now(), updated_at = now()
+                       WHERE id = %s RETURNING *""",
+                    (qa_state, reviewer, comment,
+                     Json(checks) if checks else None, did),
+                ).fetchone()
+                if row is not None:
+                    conn.execute(
+                        """UPDATE deliverable_versions SET qa_state = %s, qa_checks = %s
+                           WHERE deliverable_id = %s AND version = %s""",
+                        (qa_state, Json(checks) if checks else None,
+                         did, row["spec_version"]),
+                    )
+        return row
+
+    @translate_db_errors
+    def revise(self, did: uuid.UUID, *, new_spec: dict, comment: str | None) -> dict | None:
+        """New spec version: bumps spec_version, queues regeneration and resets
+        the QA gate — a revised artefact is a new artefact and must earn
+        approval again. Old versions stay recorded in deliverable_versions."""
+        with self._pool.connection() as conn:
+            row = conn.execute(
+                """UPDATE deliverables SET
+                     spec = %s, spec_version = spec_version + 1, status = 'queued',
+                     qa_state = 'draft', qa_reviewer = NULL, qa_comment = NULL,
+                     qa_checks = NULL, qa_decided_at = NULL, last_error = NULL,
+                     updated_at = now()
+                   WHERE id = %s RETURNING *""",
+                (Json(new_spec), did),
+            ).fetchone()
+        assert row is not None
+        self.append_event(did, "deliverable.revised", actor="reviewer",
+                          detail=f"v{row['spec_version']} queued"
+                                 + (f" · {comment}" if comment else ""))
+        return row
+
+    @translate_db_errors
+    def record_version(self, did: uuid.UUID, *, version: int, spec: dict,
+                       storage_key: str, mime_type: str, size_bytes: int,
+                       checksum_sha256: str, qa_state: str,
+                       qa_checks: dict | None) -> None:
+        """Immutable per-version artefact record (upsert: a regenerate of the
+        same version overwrites that version's row — its QA trail lives in
+        deliverable_events)."""
+        with self._pool.connection() as conn:
+            conn.execute(
+                """INSERT INTO deliverable_versions
+                     (deliverable_id, version, spec, storage_key, mime_type,
+                      size_bytes, checksum_sha256, qa_state, qa_checks)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (deliverable_id, version) DO UPDATE SET
+                     spec = EXCLUDED.spec, storage_key = EXCLUDED.storage_key,
+                     mime_type = EXCLUDED.mime_type, size_bytes = EXCLUDED.size_bytes,
+                     checksum_sha256 = EXCLUDED.checksum_sha256,
+                     qa_state = EXCLUDED.qa_state, qa_checks = EXCLUDED.qa_checks,
+                     generated_at = now()""",
+                (did, version, Json(spec), storage_key, mime_type, size_bytes,
+                 checksum_sha256, qa_state, Json(qa_checks) if qa_checks else None),
+            )
+
+    @translate_db_errors
+    def get_versions(self, did: uuid.UUID) -> list[dict]:
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                """SELECT version, spec, storage_key, mime_type, size_bytes,
+                          checksum_sha256, qa_state, qa_checks, generated_at
+                   FROM deliverable_versions WHERE deliverable_id = %s
+                   ORDER BY version DESC""",
+                (did,),
+            ).fetchall()
+        return list(rows)
+
     # -- reads -----------------------------------------------------------------
     @translate_db_errors
     def get(self, did: uuid.UUID, org_id: str | None) -> dict | None:
@@ -121,6 +205,7 @@ class DeliverableStore:
             rows = conn.execute(
                 """SELECT id, org_id, scope, engagement_id, assignment_id, title, kind,
                           status, mime_type, size_bytes, checksum_sha256, last_error,
+                          spec_version, qa_state, qa_reviewer, qa_decided_at,
                           created_by, created_at, updated_at
                    FROM deliverables WHERE org_id = %s
                    ORDER BY created_at DESC LIMIT %s""",

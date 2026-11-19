@@ -42,3 +42,40 @@ CREATE TABLE IF NOT EXISTS deliverable_events (
 );
 
 CREATE INDEX IF NOT EXISTS deliverable_events_del_idx ON deliverable_events (deliverable_id, id);
+
+-- ── Phase 7 (CAIOS-QA-001): QA governance ────────────────────────────────────
+-- A deliverable is releasable only when qa_state = 'approved' (§13 gate).
+-- Revisions create a new spec_version; every generated version is recorded
+-- immutably in deliverable_versions (spec + artefact metadata per version).
+-- ALTERs are idempotent: the file is ensured on every boot.
+
+ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS qa_state       text NOT NULL DEFAULT 'draft';
+ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS qa_reviewer    text;
+ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS qa_comment     text;
+ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS qa_checks      jsonb;
+ALTER TABLE deliverables ADD COLUMN IF NOT EXISTS qa_decided_at  timestamptz;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deliverables_qa_state_check') THEN
+        ALTER TABLE deliverables ADD CONSTRAINT deliverables_qa_state_check
+            CHECK (qa_state IN ('draft','in_review','approved','changes_requested'));
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS deliverable_versions (
+    id               bigserial PRIMARY KEY,
+    deliverable_id   uuid        NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+    version          int         NOT NULL,             -- == spec_version of that build
+    spec             jsonb       NOT NULL,             -- exact spec that produced the bytes
+    storage_key      text,                            -- versioned key: {id}.v{n}.{ext}
+    mime_type        text,
+    size_bytes       int,
+    checksum_sha256  text,
+    qa_state         text        NOT NULL DEFAULT 'draft',
+    qa_checks        jsonb,
+    generated_at     timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (deliverable_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS deliverable_versions_del_idx
+    ON deliverable_versions (deliverable_id, version DESC);

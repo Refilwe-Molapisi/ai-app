@@ -409,6 +409,7 @@ th.num{text-align:right}
               <div class="feed-item"><p><span class="evt">provenance footer</span> — every artefact carries CAIOS, UTC time and a verify-before-external-use note.</p></div>
               <div class="feed-item"><p><span class="evt">event trail</span> — created → generating → ready (or failed, with the honest reason) on an append-only log.</p></div>
               <div class="feed-item"><p><span class="evt">private storage</span> — bytes sit server-side; downloads stream through the authorised API, never public URLs.</p></div>
+              <div class="feed-item"><p><span class="evt">QA gate</span> — only QA-approved artefacts are releasable; revisions reset the gate, and approval never carries over.</p></div>
               <div class="feed-item"><p><span class="evt">injection guard</span> — spreadsheet cells that start like formulas are stored as text, never executed.</p></div>
             </div>
           </div>
@@ -549,6 +550,7 @@ th.num{text-align:right}
       </div>
       <div class="field"><label for="dl-eng">Engagement ID (client scope)</label><input type="text" id="dl-eng" maxlength="120" placeholder="e.g. eng-acme-2026"></div>
       <div class="field"><label for="dl-pf">Prepared for (optional)</label><input type="text" id="dl-pf" maxlength="200"></div>
+      <div class="field" id="dl-note-wrap" style="display:none"><label for="dl-note">Revision note (goes on the trail)</label><input type="text" id="dl-note" maxlength="500" placeholder="e.g. Added the QA caveat"></div>
       <div class="field"><label>Sections</label></div>
       <div id="dl-secs"></div>
       <button class="btn btn-secondary" type="button" id="dl-add-sec" style="margin:4px 0 14px">+ Add section</button>
@@ -561,6 +563,38 @@ th.num{text-align:right}
         <button class="btn btn-primary" type="submit" id="dl-submit">Queue generation</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ── QA decision modal ────────────────────────────────────────────────── -->
+<div class="overlay" id="modal-qav" role="dialog" aria-modal="true" aria-labelledby="qa-title">
+  <div class="modal">
+    <h2 id="qa-title">QA decision</h2>
+    <p class="page-sub" style="margin-bottom:16px">The reviewer identity is taken from your authenticated session, never from the form.</p>
+    <form id="qa-form">
+      <div class="field"><label>Checklist (recorded with the decision)</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:normal"><input type="checkbox" data-check="figures_verified"> Figures verified against source data</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:normal"><input type="checkbox" data-check="citations_verified"> Citations checked and traceable</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:normal"><input type="checkbox" data-check="popia_clear"> POPIA scan clear — no personal information leaked</label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:normal"><input type="checkbox" data-check="branding_ok"> Branding and tone match house style</label>
+      </div>
+      <div class="field"><label for="qa-comment">Comment</label>
+        <textarea id="qa-comment" maxlength="2000" placeholder="Required when requesting changes; recorded either way"></textarea></div>
+      <div class="actions">
+        <button class="btn btn-secondary" type="button" id="qa-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="qa-submit">Record decision</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Version history modal ────────────────────────────────────────────── -->
+<div class="overlay" id="modal-vers" role="dialog" aria-modal="true" aria-labelledby="vers-title">
+  <div class="modal">
+    <h2 id="vers-title">Version history</h2>
+    <p class="page-sub" style="margin-bottom:16px">Every generated version, immutably recorded — superseded artefacts stay downloadable.</p>
+    <div class="table-wrap" id="vers-list"></div>
+    <div class="actions"><button class="btn btn-secondary" type="button" id="vers-cancel">Close</button></div>
   </div>
 </div>
 
@@ -686,12 +720,15 @@ const DEMO={
   deliverables:[
     {id:'e1a2b3c4-0000-4000-8000-000000000001',title:'Q3 Variance Workbook',kind:'xlsx',scope:'company',org_id:'company',
      status:'ready',mime_type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-     size_bytes:5950,checksum_sha256:'3f9c1a2b…demo',created_by:'ui',created_at:'2026-11-18T08:40:00Z',updated_at:'2026-11-18T08:40:09Z'},
+     size_bytes:5950,checksum_sha256:'3f9c1a2b…demo',created_by:'ui',spec_version:2,
+     qa_state:'approved',qa_reviewer:'dev-anonymous',created_at:'2026-11-18T08:40:00Z',updated_at:'2026-11-18T08:40:09Z'},
     {id:'e1a2b3c4-0000-4000-8000-000000000002',title:'VAT brief — AI export',kind:'md',scope:'company',org_id:'company',
      status:'ready',mime_type:'text/markdown',size_bytes:1187,checksum_sha256:'b2d84e10…demo',
-     created_by:'ai-console',created_at:'2026-11-17T15:22:00Z',updated_at:'2026-11-17T15:22:04Z'},
+     created_by:'ai-console',spec_version:1,qa_state:'draft',
+     created_at:'2026-11-17T15:22:00Z',updated_at:'2026-11-17T15:22:04Z'},
     {id:'e1a2b3c4-0000-4000-8000-000000000003',title:'Field review report',kind:'docx',scope:'client',org_id:'company',engagement_id:'eng-acme-2026',
-     status:'generating',mime_type:null,size_bytes:null,checksum_sha256:null,created_by:'ui',
+     status:'ready',mime_type:null,size_bytes:null,checksum_sha256:null,created_by:'ui',spec_version:1,
+     qa_state:'changes_requested',qa_reviewer:'dev-anonymous',
      created_at:'2026-11-18T09:12:00Z',updated_at:'2026-11-18T09:12:05Z'}]
 };
 
@@ -749,7 +786,9 @@ const PILL={running:['progress','RUNNING'],awaiting_approval:['pending','AWAITIN
   queued:['muted','QUEUED'],pending:['muted','PENDING'],done:['ok','DONE'],
   skipped:['muted','SKIPPED'],extracting:['progress','EXTRACTING'],indexed:['ok','INDEXED'],
   failed_doc:['error','FAILED'],extracted:['progress','EXTRACTED'],uploaded:['muted','UPLOADED'],
-  generating:['progress','GENERATING'],ready:['ok','READY']};
+  generating:['progress','GENERATING'],ready:['ok','READY'],
+  draft:['muted','QA DRAFT'],in_review:['pending','IN REVIEW'],
+  approved:['ok','QA APPROVED'],changes_requested:['error','CHANGES REQUESTED']};
 const pill=(st,extra)=>{const m=PILL[st]||['muted',String(st||'—').toUpperCase()];
   return '<span class="pill '+m[0]+'">'+esc(extra||m[1])+'</span>';};
 
@@ -969,21 +1008,37 @@ function renderDeliverables(){
   const rows=S.deliverables;
   $('#dl-list-sub').textContent=rows.length+' artefacts · org '+esc(CFG.org);
   $('#dl-table').innerHTML=rows.length?
-    '<table><thead><tr><th>Deliverable</th><th>Format</th><th>Status</th><th class="num">Size</th><th>Updated</th><th></th></tr></thead><tbody>'+
-    rows.map(d=>'<tr><td class="cell-title"><b>'+esc(d.title)+'</b><span>'+
-      esc(String(d.id).slice(0,8).toUpperCase())+(d.engagement_id?' · '+esc(d.engagement_id):'')+
-      ' · by '+esc(d.created_by||'ui')+'</span></td>'+
-      '<td><span class="pill muted">'+esc(String(d.kind||'').toUpperCase())+'</span></td>'+
-      '<td>'+pill(d.status)+'</td>'+
-      '<td class="num">'+(d.size_bytes!=null?(Math.round(d.size_bytes/102.4)/10)+' kB':'—')+'</td>'+
-      '<td>'+esc(rel(d.updated_at||d.created_at))+'</td>'+
-      '<td>'+(d.status==='ready'?'<button class="btn btn-secondary" data-dldl="'+esc(d.id)+
-        '" data-kind="'+esc(d.kind)+'" data-title="'+esc(d.title)+'">Download</button>'
-        :(d.last_error?'<span class="hint" title="'+esc(d.last_error)+'">failed</span>':''))+
-      '</td></tr>').join('')+'</tbody></table>'
+    '<table><thead><tr><th>Deliverable</th><th>Format</th><th>Status</th><th>QA</th><th class="num">Size</th><th>Updated</th><th></th></tr></thead><tbody>'+
+    rows.map(d=>{
+      const qa=d.qa_state||'draft', ready=d.status==='ready';
+      const acts=[];
+      if(ready)acts.push('<button class="btn btn-secondary" data-dldl="'+esc(d.id)+
+        '" data-kind="'+esc(d.kind)+'" data-title="'+esc(d.title)+'" data-qa="'+esc(qa)+'">Download</button>');
+      if(ready&&(qa==='draft'||qa==='changes_requested'))
+        acts.push('<button class="btn btn-secondary" data-dlsubmit="'+esc(d.id)+'">Submit</button>');
+      if(qa==='in_review')
+        acts.push('<button class="btn btn-primary" data-dlqa="'+esc(d.id)+'" data-decision="approve">Approve</button>'+
+          '<button class="btn btn-secondary" data-dlqa="'+esc(d.id)+'" data-decision="request_changes">Changes</button>');
+      if(ready)
+        acts.push('<button class="btn btn-secondary" data-dlrevise="'+esc(d.id)+
+          '" data-version="'+esc(d.spec_version||1)+'">Revise</button>');
+      return '<tr><td class="cell-title"><b>'+esc(d.title)+'</b><span>'+
+        esc(String(d.id).slice(0,8).toUpperCase())+(d.engagement_id?' · '+esc(d.engagement_id):'')+
+        ' · by '+esc(d.created_by||'ui')+'</span></td>'+
+        '<td><span class="pill muted">'+esc(String(d.kind||'').toUpperCase())+'</span></td>'+
+        '<td>'+pill(d.status)+'</td>'+
+        '<td>'+pill(qa)+' <button class="pill muted" data-dlvers="'+esc(d.id)+
+          '" style="cursor:pointer;border:1px solid var(--border)">v'+esc(d.spec_version||1)+'</button>'+
+        '</td>'+
+        '<td class="num">'+(d.size_bytes!=null?(Math.round(d.size_bytes/102.4)/10)+' kB':'—')+'</td>'+
+        '<td>'+esc(rel(d.updated_at||d.created_at))+'</td>'+
+        '<td class="cell-title" style="text-align:right">'+acts.join(' ')+
+          (!ready&&d.last_error?'<span class="hint" title="'+esc(d.last_error)+'">failed</span>':'')+
+        '</td></tr>';
+    }).join('')+'</tbody></table>'
     :'<div class="empty">No deliverables yet — create one or export an AI answer.</div>';
 }
-async function dlDownload(id,kind,title){
+async function dlDownload(id,kind,title,qa){
   if(!S.live)return demoGuard();
   try{const res=await fetch(CFG.base.replace(/\/+$/,'')+'/deliverables/'+encodeURIComponent(id)+
         '/download?org_id='+encodeURIComponent(CFG.org),
@@ -996,28 +1051,62 @@ async function dlDownload(id,kind,title){
     a.download=(title||'deliverable')+'.'+(kind||'bin');
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-    toast('<b>Download started</b> — '+esc(title)+'.'+esc(kind));
+    toast(qa==='approved'?'<b>Download started</b> — '+esc(title)+'.'+esc(kind)+
+        ' <span class="pill ok">QA APPROVED</span>'
+      :'<b>Download started (internal copy)</b> — '+esc(title)+'.'+esc(kind)+
+        ' is not QA-approved for release.');
   }catch(e){toast('<b>Download failed</b> — '+esc(e.message));}
 }
-function dlAddSection(){
+function dlAddSection(heading,body,bullets){
   const div=document.createElement('div');
   div.className='dl-sec';
   div.style.cssText='border:1px solid var(--border);border-radius:var(--r-btn);padding:12px;margin-bottom:10px';
-  div.innerHTML='<div class="field" style="margin-bottom:8px"><input type="text" data-sec-h maxlength="200" placeholder="Section heading"></div>'+
-    '<div class="field" style="margin-bottom:8px"><textarea data-sec-b maxlength="20000" placeholder="Body — blank line starts a new paragraph"></textarea></div>'+
-    '<div class="field" style="margin-bottom:0"><input type="text" data-sec-l placeholder="Bullets, comma-separated (optional)"></div>'+
+  div.innerHTML='<div class="field" style="margin-bottom:8px"><input type="text" data-sec-h maxlength="200" placeholder="Section heading" value="'+esc(heading||'')+'"></div>'+
+    '<div class="field" style="margin-bottom:8px"><textarea data-sec-b maxlength="20000" placeholder="Body — blank line starts a new paragraph">'+esc(body||'')+'</textarea></div>'+
+    '<div class="field" style="margin-bottom:0"><input type="text" data-sec-l placeholder="Bullets, comma-separated (optional)" value="'+esc(bullets||'')+'"></div>'+
     '<button type="button" class="btn btn-danger" data-sec-del style="min-height:30px;padding:0 10px;font-size:12px;margin-top:6px">Remove section</button>';
   $('#dl-secs').appendChild(div);
 }
+let DL_REVISE=null;   // {id, version} while the builder modal edits a revision
 function openDlModal(){
   if(!S.live)return demoGuard();
+  DL_REVISE=null;
   $('#dl-title').value='';$('#dl-pf').value='';$('#dl-eng').value='';
   $('#dl-t-title').value='';$('#dl-t-cols').value='';$('#dl-t-rows').value='';
+  $('#dl-note').value='';$('#dl-note-wrap').style.display='none';
+  $('#dl-kind').disabled=false;$('#dl-scope').disabled=false;
   $('#dl-secs').innerHTML='';dlAddSection();
+  $('#md-title').textContent='New deliverable';
+  $('#dl-submit').textContent='Queue generation';
   $('#modal-dl').classList.add('show');$('#dl-title').focus();
 }
+async function openDlRevise(id,version){
+  if(!S.live)return demoGuard();
+  let row;
+  try{row=(await api('/deliverables/'+encodeURIComponent(id)+'?org_id='+encodeURIComponent(CFG.org))).deliverable;}
+  catch(ex){return toast('<b>Cannot revise</b> — '+esc(ex.message));}
+  const spec=row.spec||{};
+  DL_REVISE={id,version:row.spec_version||version||1};
+  $('#dl-title').value=row.title;$('#dl-pf').value=(spec.meta&&spec.meta.prepared_for)||'';
+  $('#dl-eng').value=row.engagement_id||'';
+  $('#dl-t-title').value=(spec.tables&&spec.tables[0]&&spec.tables[0].title)||'';
+  $('#dl-t-cols').value=(spec.tables&&spec.tables[0])?spec.tables[0].columns.join(', '):'';
+  $('#dl-t-rows').value=(spec.tables&&spec.tables[0])?
+    spec.tables[0].rows.map(r=>r.join(', ')).join('\n'):'';
+  $('#dl-note').value='';$('#dl-note-wrap').style.display='';
+  $('#dl-kind').disabled=true;$('#dl-scope').disabled=true;   // format/scope are frozen on a revision
+  $('#dl-secs').innerHTML='';
+  (spec.sections||[]).forEach(s=>dlAddSection(s.heading,s.body,(s.bullets||[]).join(', ')));
+  if(!(spec.sections||[]).length)dlAddSection();
+  if((spec.tables||[]).length>1)
+    toast('<b>Note</b> — the current spec has '+spec.tables.length+
+      ' tables; this editor edits the first one. Revise via the API for full control.');
+  $('#md-title').textContent='Revise deliverable — new version v'+((row.spec_version||1)+1);
+  $('#dl-submit').textContent='Queue revision';
+  $('#modal-dl').classList.add('show');
+}
 $('#dl-new').addEventListener('click',openDlModal);
-$('#dl-add-sec').addEventListener('click',dlAddSection);
+$('#dl-add-sec').addEventListener('click',()=>dlAddSection());
 $('#dl-cancel').addEventListener('click',()=>$('#modal-dl').classList.remove('show'));
 $('#dl-form').addEventListener('submit',async e=>{
   e.preventDefault();
@@ -1038,21 +1127,80 @@ $('#dl-form').addEventListener('submit',async e=>{
     return toast('<b>Table rows must match columns</b> — same number of comma-separated cells per line.');
   const spec={meta:{},sections,tables};
   if($('#dl-pf').value.trim())spec.meta.prepared_for=$('#dl-pf').value.trim();
-  const body={org_id:CFG.org,title:$('#dl-title').value.trim(),kind:$('#dl-kind').value,
-    scope:$('#dl-scope').value,spec};
-  if($('#dl-scope').value==='client'){const eng=$('#dl-eng').value.trim();
-    if(!eng)return toast('<b>Engagement ID required</b> for client scope.');
-    body.engagement_id=eng;}
   $('#dl-submit').disabled=true;
-  try{await api('/deliverables',{method:'POST',body:JSON.stringify(body)});
-    $('#modal-dl').classList.remove('show');
-    toast('<b>Queued</b> — report.generate renders it on the next queue tick.');
+  try{
+    if(DL_REVISE){
+      const body={org_id:CFG.org,spec,comment:$('#dl-note').value.trim()||null};
+      await api('/deliverables/'+DL_REVISE.id+'/revise',{method:'POST',body:JSON.stringify(body)});
+      $('#modal-dl').classList.remove('show');
+      toast('<b>Revision queued</b> — QA gate reset; the new version must earn approval again.');
+    }else{
+      const body={org_id:CFG.org,title:$('#dl-title').value.trim(),kind:$('#dl-kind').value,
+        scope:$('#dl-scope').value,spec};
+      if($('#dl-scope').value==='client'){const eng=$('#dl-eng').value.trim();
+        if(!eng)return toast('<b>Engagement ID required</b> for client scope.');
+        body.engagement_id=eng;}
+      await api('/deliverables',{method:'POST',body:JSON.stringify(body)});
+      $('#modal-dl').classList.remove('show');
+      toast('<b>Queued</b> — report.generate renders it on the next queue tick.');
+    }
     await loadDeliverables();renderDeliverables();
     setTimeout(()=>{loadDeliverables().then(()=>{
       if(location.hash.includes('deliverables'))renderDeliverables();});},2500);
-  }catch(ex){toast('<b>Creation failed</b> — '+esc(ex.message));}
+  }catch(ex){toast('<b>Submission failed</b> — '+esc(ex.message));}
   $('#dl-submit').disabled=false;
 });
+async function dlSubmitForReview(id){
+  if(!S.live)return demoGuard();
+  try{await api('/deliverables/'+encodeURIComponent(id)+'/submit-review',
+      {method:'POST',body:JSON.stringify({org_id:CFG.org})});
+    toast('<b>Submitted for QA review</b>.');
+    await loadDeliverables();renderDeliverables();
+  }catch(ex){toast('<b>Submit failed</b> — '+esc(ex.message));}
+}
+let DL_QA=null;   // {id, decision} while the QA modal is open
+function openQaModal(id,decision){
+  if(!S.live)return demoGuard();
+  DL_QA={id,decision};
+  $('#qa-comment').value='';
+  $$('#modal-qav input[type="checkbox"]').forEach(c=>c.checked=false);
+  $('#qa-title').textContent=decision==='approve'?
+    'Approve deliverable':'Request changes';
+  $('#modal-qav').classList.add('show');
+  $('#qa-comment').focus();
+}
+$('#qa-cancel').addEventListener('click',()=>$('#modal-qav').classList.remove('show'));
+$('#qa-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!DL_QA||!S.live)return demoGuard();
+  const comment=$('#qa-comment').value.trim();
+  const checks={};
+  $$('#modal-qav input[type="checkbox"]').forEach(c=>{if(c.checked)checks[c.dataset.check]=true;});
+  if(DL_QA.decision==='request_changes'&&!comment)
+    return toast('<b>Comment required</b> — changes requested without a reason is not governable.');
+  try{const r=await api('/deliverables/'+DL_QA.id+'/qa',{method:'POST',
+      body:JSON.stringify({org_id:CFG.org,decision:DL_QA.decision,
+        comment:comment||null,checks})});
+    $('#modal-qav').classList.remove('show');
+    toast(r.qa_state==='approved'?'<b>Approved</b> — artefact is releasable.'
+      :'<b>Changes requested</b> — revise to re-enter the gate.');
+    await loadDeliverables();renderDeliverables();
+  }catch(ex){toast('<b>QA decision failed</b> — '+esc(ex.message));}
+});
+async function openDlVersions(id){
+  if(!S.live)return demoGuard();
+  try{const r=await api('/deliverables/'+encodeURIComponent(id)+'/versions?org_id='+encodeURIComponent(CFG.org));
+    $('#vers-list').innerHTML=r.versions.length?
+      '<table><thead><tr><th>Version</th><th>QA</th><th class="num">Size</th><th>Checksum</th><th>Generated</th></tr></thead><tbody>'+
+      r.versions.map(v=>'<tr><td><b>v'+esc(v.version)+'</b></td><td>'+pill(v.qa_state||'draft')+'</td>'+
+        '<td class="num">'+(v.size_bytes!=null?(Math.round(v.size_bytes/102.4)/10)+' kB':'—')+'</td>'+
+        '<td class="hint">'+esc(String(v.checksum_sha256||'').slice(0,16))+'…</td>'+
+        '<td>'+esc(rel(v.generated_at))+'</td></tr>').join('')+'</tbody></table>'
+      :'<div class="empty">No generated versions recorded yet.</div>';
+    $('#modal-vers').classList.add('show');
+  }catch(ex){toast('<b>History unavailable</b> — '+esc(ex.message));}
+}
+$('#vers-cancel').addEventListener('click',()=>$('#modal-vers').classList.remove('show'));
 async function exportAnswer(){
   const la=S.lastAnswer;
   if(!la||!S.live)return demoGuard();
@@ -1203,7 +1351,15 @@ document.addEventListener('click',e=>{
   const start=e.target.closest('[data-startwf]');
   if(start){openModal(start.dataset.startwf);return;}
   const dl=e.target.closest('[data-dldl]');
-  if(dl){dlDownload(dl.dataset.dldl,dl.dataset.kind,dl.dataset.title);return;}
+  if(dl){dlDownload(dl.dataset.dldl,dl.dataset.kind,dl.dataset.title,dl.dataset.qa);return;}
+  const dlSub=e.target.closest('[data-dlsubmit]');
+  if(dlSub){dlSubmitForReview(dlSub.dataset.dlsubmit);return;}
+  const dlQa=e.target.closest('[data-dlqa]');
+  if(dlQa){openQaModal(dlQa.dataset.dlqa,dlQa.dataset.decision);return;}
+  const dlRev=e.target.closest('[data-dlrevise]');
+  if(dlRev){openDlRevise(dlRev.dataset.dlrevise,dlRev.dataset.version);return;}
+  const dlVers=e.target.closest('[data-dlvers]');
+  if(dlVers){openDlVersions(dlVers.dataset.dlvers);return;}
   if(e.target.closest('#ai-export')){exportAnswer();return;}
   const secDel=e.target.closest('[data-sec-del]');
   if(secDel){secDel.closest('.dl-sec').remove();return;}
@@ -1211,7 +1367,9 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){$('#modal-new').classList.remove('show');
-    $('#modal-dl').classList.remove('show');}});
+    $('#modal-dl').classList.remove('show');
+    $('#modal-qav').classList.remove('show');
+    $('#modal-vers').classList.remove('show');}});
 window.addEventListener('hashchange',()=>route(true));
 
 /* ── Boot ─────────────────────────────────────────────────────────────── */

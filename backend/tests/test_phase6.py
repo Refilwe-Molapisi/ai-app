@@ -138,16 +138,16 @@ with tempfile.TemporaryDirectory() as tmp:
     except ValueError:
         check("local storage: traversal refused", True)
 
-# ── 8. Storage key governance prefixes ───────────────────────────────────────
+# ── 8. Storage key governance prefixes (Phase 7: versioned keys) ─────────────
 from app.deliverables.handlers import deliverable_key  # noqa: E402
 import uuid as _uuid  # noqa: E402
 did = _uuid.uuid4()
-check("keys: company scope under company-knowledge",
-      deliverable_key("org-a", "company", None, did, "xlsx")
-      == f"company-knowledge/deliverables/org-a/{did}.xlsx")
-check("keys: client scope under client prefix",
-      deliverable_key("org-a", "client", "eng-9", did, "pdf")
-      == f"clients/org-a/eng-9/deliverables/{did}.pdf")
+check("keys: company scope under company-knowledge, versioned",
+      deliverable_key("org-a", "company", None, did, 1, "xlsx")
+      == f"company-knowledge/deliverables/org-a/{did}.v1.xlsx")
+check("keys: client scope under client prefix, version 2 never clobbers v1",
+      deliverable_key("org-a", "client", "eng-9", did, 2, "pdf")
+      == f"clients/org-a/eng-9/deliverables/{did}.v2.pdf")
 
 print()
 print("RESULT:", "ALL PASS" if not failures else f"FAILURES: {failures}")
