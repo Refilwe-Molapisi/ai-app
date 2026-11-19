@@ -122,6 +122,21 @@ class CoordinationStore:
             ).fetchall()
         return [_assignment_dict(r) for r in rows]
 
+    @translate_db_errors
+    def status_counts(self, org_id: str) -> dict:
+        """Counts for the ops overview (CAIOS-OPS-001): assignments per status,
+        and open work (running/awaiting_approval) per workflow so the ops desk
+        can allocate workload to divisions via ops/workflows_map.py."""
+        with self._pool.connection() as conn:
+            by_status = {r["status"]: r["n"] for r in conn.execute(
+                "SELECT status, count(*) AS n FROM assignments WHERE org_id = %s "
+                "GROUP BY status", (org_id,)).fetchall()}
+            open_by_workflow = {r["workflow"]: r["n"] for r in conn.execute(
+                "SELECT workflow, count(*) AS n FROM assignments WHERE org_id = %s "
+                "AND status IN ('running','awaiting_approval') GROUP BY workflow",
+                (org_id,)).fetchall()}
+        return {"by_status": by_status, "open_by_workflow": open_by_workflow}
+
     # -- step transitions ------------------------------------------------------
     @translate_db_errors
     def next_actionable_step(self, assignment_id: uuid.UUID) -> dict | None:

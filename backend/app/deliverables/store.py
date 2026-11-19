@@ -200,6 +200,25 @@ class DeliverableStore:
         return row
 
     @translate_db_errors
+    def status_counts(self, org_id: str) -> dict[str, int]:
+        """Deliverable build-status counts for the ops overview (CAIOS-OPS-001)."""
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT status, count(*) AS n FROM deliverables WHERE org_id = %s "
+                "GROUP BY status", (org_id,)).fetchall()
+        return {r["status"]: r["n"] for r in rows}
+
+    @translate_db_errors
+    def qa_counts(self, org_id: str) -> dict[str, int]:
+        """QA-gate counts for the ops overview — how much work is waiting at
+        the approval gate, per CAIOS-QA-001."""
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT qa_state, count(*) AS n FROM deliverables WHERE org_id = %s "
+                "GROUP BY qa_state", (org_id,)).fetchall()
+        return {r["qa_state"]: r["n"] for r in rows}
+
+    @translate_db_errors
     def list(self, org_id: str, limit: int = 50) -> list[dict]:
         with self._pool.connection() as conn:
             rows = conn.execute(

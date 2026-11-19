@@ -268,6 +268,9 @@ th.num{text-align:right}
       Usage &amp; Spend</button>
 
     <div class="nav-label">Administration</div>
+    <button class="nav-item" data-view="ops">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.5" cy="10" r="2.5"/><path d="M14.5 19.5a5 5 0 0 1 7-4"/></svg>
+      Internal Ops</button>
     <button class="nav-item" data-view="workflows">
       <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M6 8.5v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-2M12 13.5v2"/></svg>
       Workflows</button>
@@ -476,6 +479,33 @@ th.num{text-align:right}
         <div class="grid-two section-gap" id="wf-cards"></div>
       </section>
 
+      <!-- ── Internal ops (Phase 8) ───────────────────────────────────── -->
+      <section class="view" id="view-ops" aria-label="Internal ops">
+        <div class="page-head">
+          <div>
+            <h1 class="page-title">Internal Ops</h1>
+            <p class="page-sub" id="ops-list-sub">The four desks and the health of the machine.</p>
+          </div>
+          <button class="btn btn-primary" id="ops-new">+ Add member</button>
+        </div>
+        <div class="errbox" id="ops-err"></div>
+        <div class="grid-two section-gap" id="ops-divs"></div>
+        <div class="section-gap card">
+          <h2>Machine health</h2>
+          <div class="stats" id="ops-health"></div>
+        </div>
+        <div class="section-gap card">
+          <div class="page-head" style="margin-bottom:8px"><h2 style="margin:0">Team roster</h2>
+            <label style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:normal">
+              <input type="checkbox" id="ops-inactive"> show inactive</label></div>
+          <div class="table-wrap" id="ops-table"></div>
+        </div>
+        <div class="section-gap card">
+          <h2>Roster trail</h2>
+          <div class="feed" id="ops-events"></div>
+        </div>
+      </section>
+
       <!-- ── Connection ───────────────────────────────────────────────── -->
       <section class="view" id="view-connection" aria-label="Connection">
         <h1 class="page-title">Connection</h1>
@@ -595,6 +625,30 @@ th.num{text-align:right}
     <p class="page-sub" style="margin-bottom:16px">Every generated version, immutably recorded — superseded artefacts stay downloadable.</p>
     <div class="table-wrap" id="vers-list"></div>
     <div class="actions"><button class="btn btn-secondary" type="button" id="vers-cancel">Close</button></div>
+  </div>
+</div>
+
+<!-- ── Add team member modal (Phase 8) ─────────────────────────────────── -->
+<div class="overlay" id="modal-ops" role="dialog" aria-modal="true" aria-labelledby="om-title">
+  <div class="modal">
+    <h2 id="om-title">Add team member</h2>
+    <p class="page-sub" style="margin-bottom:16px">The four desks mirror the §11 division agents; the roster trail records every change.</p>
+    <form id="om-form">
+      <div class="field"><label for="om-name">Full name *</label><input type="text" id="om-name" maxlength="120" required></div>
+      <div class="field"><label for="om-email">Email (optional)</label><input type="email" id="om-email" maxlength="200"></div>
+      <div class="field"><label for="om-division">Division *</label>
+        <select id="om-division">
+          <option>BI &amp; Analytics</option>
+          <option>Commercial Intelligence</option>
+          <option>Risk &amp; Controls</option>
+          <option selected>Governance &amp; Operations</option>
+        </select></div>
+      <div class="field"><label for="om-role">Role (optional)</label><input type="text" id="om-role" maxlength="120" placeholder="e.g. Senior Analyst"></div>
+      <div class="actions">
+        <button class="btn btn-secondary" type="button" id="om-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit">Add member</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -729,14 +783,43 @@ const DEMO={
     {id:'e1a2b3c4-0000-4000-8000-000000000003',title:'Field review report',kind:'docx',scope:'client',org_id:'company',engagement_id:'eng-acme-2026',
      status:'ready',mime_type:null,size_bytes:null,checksum_sha256:null,created_by:'ui',spec_version:1,
      qa_state:'changes_requested',qa_reviewer:'dev-anonymous',
-     created_at:'2026-11-18T09:12:00Z',updated_at:'2026-11-18T09:12:05Z'}]
+     created_at:'2026-11-18T09:12:00Z',updated_at:'2026-11-18T09:12:05Z'}],
+  ops:{
+    members:[
+      {id:'f1a2b3c4-0000-4000-8000-000000000001',name:'Thabo Mokoena',email:'thabo@caios.example',
+       division:'BI & Analytics',role:'Senior Analyst',active:true,created_at:'2026-09-02T08:00:00Z'},
+      {id:'f1a2b3c4-0000-4000-8000-000000000002',name:'Nadia Petersen',email:'nadia@caios.example',
+       division:'Risk & Controls',role:'Controls Reviewer',active:true,created_at:'2026-09-15T08:00:00Z'},
+      {id:'f1a2b3c4-0000-4000-8000-000000000003',name:'Sipho Dlamini',email:'sipho@caios.example',
+       division:'Governance & Operations',role:'Company Secretary',active:true,created_at:'2026-08-20T08:00:00Z'},
+      {id:'f1a2b3c4-0000-4000-8000-000000000004',name:'Lerato Khumalo',email:'lerato@caios.example',
+       division:'Commercial Intelligence',role:'Market Analyst',active:false,created_at:'2026-10-01T08:00:00Z'}],
+    overview:{
+      team:{total:4,active:3,by_division:{
+        'BI & Analytics':{members:1,active:1},
+        'Commercial Intelligence':{members:1,active:0},
+        'Risk & Controls':{members:1,active:1},
+        'Governance & Operations':{members:1,active:1}}},
+      assignments:{by_status:{running:2,awaiting_approval:1,completed:3},
+        open_by_division:{'BI & Analytics':1,'Commercial Intelligence':0,
+          'Risk & Controls':1,'Governance & Operations':1}},
+      jobs:{by_status:{pending:1,done:14,failed:0}},
+      deliverables:{by_status:{ready:3,queued:1},by_qa_state:{approved:1,draft:2,in_review:1}},
+      ai:{totals:{calls:47,estimated_cost_usd:3.18,errors:1}}},
+    recent_events:[
+      {member_id:'f1a2b3c4-0000-4000-8000-000000000004',event:'member.updated',
+       actor:'dev-anonymous',detail:'active=False',created_at:'2026-11-15T10:02:00Z'},
+      {member_id:'f1a2b3c4-0000-4000-8000-000000000004',event:'member.added',
+       actor:'dev-anonymous',detail:'Lerato Khumalo → Commercial Intelligence · Market Analyst',
+       created_at:'2026-10-01T08:00:05Z'}]}
 };
 
 /* ── Loaders ──────────────────────────────────────────────────────────── */
 async function loadAll(){
-  err('#ov-err',0);err('#asg-err',0);err('#ag-err',0);err('#wf-err',0);err('#us-err',0);err('#kb-err',0);
+  err('#ov-err',0);err('#asg-err',0);err('#ag-err',0);err('#wf-err',0);err('#us-err',0);err('#kb-err',0);err('#ops-err',0);
   const jobs=[
-    loadAssignments(),loadWorkflows(),loadAgents(),loadUsage(),loadDocs(),loadDeliverables()];
+    loadAssignments(),loadWorkflows(),loadAgents(),loadUsage(),loadDocs(),loadDeliverables(),
+    loadOps()];
   await Promise.allSettled(jobs);
   renderBadge();route(true);
 }
@@ -768,6 +851,16 @@ async function loadDeliverables(){
   const j=await api('/deliverables?org_id='+encodeURIComponent(CFG.org)+'&limit=50');
   S.deliverables=j.deliverables||[];
 }
+async function loadOps(){
+  if(!S.live){S.opsMembers=DEMO.ops.members;S.opsOverview=DEMO.ops.overview;
+    S.opsEvents=DEMO.ops.recent_events;S.opsInactive=false;return;}
+  S.opsInactive=$('#ops-inactive')?$('#ops-inactive').checked:false;
+  const m=await api('/ops/members?org_id='+encodeURIComponent(CFG.org)
+    +(S.opsInactive?'&include_inactive=true':''));
+  S.opsMembers=m.members||[];S.opsEvents=m.recent_events||[];
+  try{S.opsOverview=await api('/ops/overview?org_id='+encodeURIComponent(CFG.org));}
+  catch(e){S.opsOverview=null;}
+}
 /* ── Badge / chips ────────────────────────────────────────────────────── */
 function setLive(t){$('#live-label').textContent=t;}
 function renderBadge(){
@@ -795,10 +888,11 @@ const pill=(st,extra)=>{const m=PILL[st]||['muted',String(st||'—').toUpperCase
 /* ── Router ───────────────────────────────────────────────────────────── */
 const CRUMB={overview:'Overview',assignments:'Assignments',assignment:'Assignment detail',
   knowledge:'Knowledge base',deliverables:'Deliverables',agents:'Specialist agents',
-  ai:'AI console',usage:'Usage & spend',workflows:'Workflows',connection:'Connection'};
+  ai:'AI console',usage:'Usage & spend',workflows:'Workflows',ops:'Internal ops',
+  connection:'Connection'};
 const RENDER={overview:renderOverview,assignments:renderAssignments,knowledge:renderKnowledge,
   deliverables:renderDeliverables,agents:renderAgents,usage:renderUsage,
-  workflows:renderWorkflows,connection:renderConnection};
+  workflows:renderWorkflows,ops:renderOps,connection:renderConnection};
 function route(silent){
   const h=location.hash.replace(/^#\/?/,'');const seg=h.split('/');
   const view=seg[0]||'overview';
@@ -1001,6 +1095,93 @@ function renderWorkflows(){
     '<p class="hint">Required inputs: '+(w.required_inputs.length?
       w.required_inputs.map(i=>'<b>'+esc(i)+'</b>').join(', '):'none')+'</p></div>').join('')||
     '<div class="card"><div class="empty">Workflow registry unavailable</div></div>';
+}
+
+/* ── Internal ops (Phase 8, CAIOS-OPS-001) ────────────────────────────── */
+const OPS_DIVS=['BI & Analytics','Commercial Intelligence','Risk & Controls',
+  'Governance & Operations'];
+function renderOps(){
+  const ov=S.opsOverview||{},team=ov.team||{},byD=team.by_division||{};
+  const openD=(ov.assignments&&ov.assignments.open_by_division)||{};
+  const alloc=ov.workflow_allocation||{};
+  $('#ops-list-sub').textContent=(team.total!=null?
+    team.total+' members · '+team.active+' active · org '+esc(CFG.org)
+    :S.opsMembers.length+' members · org '+esc(CFG.org));
+  $('#ops-divs').innerHTML=OPS_DIVS.map(d=>{
+    const t=byD[d]||{members:S.opsMembers.filter(m=>m.division===d).length,
+      active:S.opsMembers.filter(m=>m.division===d&&m.active!==false).length};
+    const wfs=Object.keys(alloc).filter(k=>alloc[k]===d);
+    return '<div class="card"><h2>'+esc(d)+'</h2>'+
+      '<div class="stat-grid" style="display:flex;gap:18px;flex-wrap:wrap;margin:10px 0">'+
+      '<div><div style="font-size:clamp(1.4rem,3vw,1.9rem);font-weight:700">'+(t.active||0)+
+      '</div><span class="hint">active of '+(t.members||0)+'</span></div>'+
+      '<div><div style="font-size:clamp(1.4rem,3vw,1.9rem);font-weight:700">'+(openD[d]||0)+
+      '</div><span class="hint">open assignments</span></div></div>'+
+      '<p class="hint">'+(wfs.length?wfs.map(esc).join(' · '):'no workflows allocated')+'</p></div>';
+  }).join('')||'<div class="empty">Overview unavailable.</div>';
+  const jobs=(ov.jobs&&ov.jobs.by_status)||{};
+  const dstat=(ov.deliverables&&ov.deliverables.by_status)||{};
+  const qa=(ov.deliverables&&ov.deliverables.by_qa_state)||{};
+  const at=(ov.ai&&ov.ai.totals)||{};
+  const fmtUsd=v=>'$'+(Math.round((v||0)*100)/100);
+  $('#ops-health').innerHTML=[
+    ['Queue pending',jobs.pending!=null?jobs.pending:'—','jobs waiting for a worker tick'],
+    ['Queue failed',jobs.failed||0,'need a look before retry'],
+    ['Awaiting QA',((qa.draft||0)+(qa.in_review||0)),'deliverables before the approval gate'],
+    ['QA approved',qa.approved||0,'releasable artefacts'],
+    ['AI calls (30d)',at.calls||0,fmtUsd(at.estimated_cost_usd)+' est. spend'],
+    ['AI errors (30d)',at.errors||0,'of '+(at.calls||0)+' calls'],
+  ].map(s=>'<div><div class="hint" style="margin-bottom:6px">'+s[0]+'</div>'+
+    '<div style="font-size:clamp(1.5rem,3.2vw,2.2rem);font-weight:700">'+esc(String(s[1]))+
+    '</div><span class="hint">'+esc(s[2])+'</span></div>').join('');
+  $('#ops-table').innerHTML=S.opsMembers.length?
+    '<table><thead><tr><th>Member</th><th>Division</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>'+
+    S.opsMembers.map(m=>'<tr><td class="cell-title"><b>'+esc(m.name)+'</b><span>'+
+      esc(m.email||'—')+'</span></td><td>'+esc(m.division)+'</td><td>'+esc(m.role||'—')+'</td>'+
+      '<td>'+(m.active!==false?'<span class="pill ok">ACTIVE</span>':
+        '<span class="pill muted">INACTIVE</span>')+'</td>'+
+      '<td><button class="btn btn-secondary" data-opstoggle="'+esc(m.id)+
+      '" data-active="'+(m.active!==false?'1':'0')+'">'+
+      (m.active!==false?'Deactivate':'Reactivate')+'</button></td></tr>').join('')+
+    '</tbody></table>'
+    :'<div class="empty">No team members yet — add the first one.</div>';
+  $('#ops-events').innerHTML=(S.opsEvents||[]).length?
+    S.opsEvents.map(e=>'<div class="feed-item"><p><span class="evt">'+esc(e.event)+
+      '</span> '+esc(e.detail||'')+' · by '+esc(e.actor||'api')+' · '+esc(rel(e.created_at))+
+      '</p></div>').join('')
+    :'<div class="empty">Roster changes will appear here.</div>';
+}
+function openOpsModal(){
+  if(!S.live)return demoGuard();
+  $('#om-name').value='';$('#om-email').value='';$('#om-role').value='';
+  $('#om-division').value='Governance & Operations';
+  $('#modal-ops').classList.add('show');$('#om-name').focus();
+}
+$('#ops-new').addEventListener('click',openOpsModal);
+$('#om-cancel').addEventListener('click',()=>$('#modal-ops').classList.remove('show'));
+$('#ops-inactive').addEventListener('change',()=>{loadOps().then(()=>{
+  if(location.hash.includes('ops'))renderOps();});});
+$('#om-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!S.live)return demoGuard();
+  const body={org_id:CFG.org,name:$('#om-name').value.trim(),
+    email:$('#om-email').value.trim()||null,division:$('#om-division').value,
+    role:$('#om-role').value.trim()||null};
+  if(!body.name)return toast('<b>Name required</b> — who are we adding?');
+  try{await api('/ops/members',{method:'POST',body:JSON.stringify(body)});
+    $('#modal-ops').classList.remove('show');
+    toast('<b>Member added</b> — trailed on the roster trail.');
+    await loadOps();renderOps();
+  }catch(ex){toast('<b>Could not add member</b> — '+esc(ex.message));}
+});
+async function opsToggle(id,active){
+  if(!S.live)return demoGuard();
+  try{await api('/ops/members/'+encodeURIComponent(id),{method:'PATCH',
+      body:JSON.stringify({org_id:CFG.org,active:!active})});
+    toast(active?'<b>Member deactivated</b> — hidden from the active roster.'
+      :'<b>Member reactivated</b>.');
+    await loadOps();renderOps();
+  }catch(ex){toast('<b>Update failed</b> — '+esc(ex.message));}
 }
 
 /* ── Deliverables ─────────────────────────────────────────────────────── */
@@ -1360,6 +1541,8 @@ document.addEventListener('click',e=>{
   if(dlRev){openDlRevise(dlRev.dataset.dlrevise,dlRev.dataset.version);return;}
   const dlVers=e.target.closest('[data-dlvers]');
   if(dlVers){openDlVersions(dlVers.dataset.dlvers);return;}
+  const opsT=e.target.closest('[data-opstoggle]');
+  if(opsT){opsToggle(opsT.dataset.opstoggle,opsT.dataset.active==='1');return;}
   if(e.target.closest('#ai-export')){exportAnswer();return;}
   const secDel=e.target.closest('[data-sec-del]');
   if(secDel){secDel.closest('.dl-sec').remove();return;}
@@ -1369,7 +1552,8 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){$('#modal-new').classList.remove('show');
     $('#modal-dl').classList.remove('show');
     $('#modal-qav').classList.remove('show');
-    $('#modal-vers').classList.remove('show');}});
+    $('#modal-vers').classList.remove('show');
+    $('#modal-ops').classList.remove('show');}});
 window.addEventListener('hashchange',()=>route(true));
 
 /* ── Boot ─────────────────────────────────────────────────────────────── */

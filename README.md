@@ -5,15 +5,16 @@ starting from the $0 hosting strategy (CAIOS-INFRA-001) and the approved brand
 identity. This repository covers the **Phases 0–4 foundations**, **Phase 2
 (knowledge & document ingestion)**, **Phase 3 (AI integration)**, **Phase 4
 (central coordination)**, **Phase 5 (specialist agents)**, **Phase 6
-(deliverables & document generation)**, **Phase 7 (QA governance)** and the
-**production operator frontend (Vercel)**: documents upload → extraction →
-chunking → embeddings (pgvector) → org-scoped retrieval → grounded answers
-with citations, with versioned prompt templates, a full AI usage ledger, an
-assignment/workflow engine with human approval gates, an append-only
-governance trail, the three §11 division agents executing governed workflow
-steps, deterministic generation of client artefacts (.md/.docx/.xlsx/.pdf)
-with provenance footers behind a QA approval gate with revision and version
-history, and a brand-true single-file console deployed as a static site.
+(deliverables & document generation)**, **Phase 7 (QA governance)**, **Phase 8
+(internal ops)** and the **production operator frontend (Vercel)**: documents
+upload → extraction → chunking → embeddings (pgvector) → org-scoped retrieval →
+grounded answers with citations, with versioned prompt templates, a full AI
+usage ledger, an assignment/workflow engine with human approval gates, an
+append-only governance trail, the three §11 division agents executing governed
+workflow steps, deterministic generation of client artefacts
+(.md/.docx/.xlsx/.pdf) with provenance footers behind a QA approval gate with
+revision and version history, a team roster and ops-desk rollup for the four
+§11 desks, and a brand-true single-file console deployed as a static site.
 
 **Status: synthetic data only.** No client-confidential information may enter
 any component until the critical validations (TV-011/012/013/020/023) pass and
@@ -35,7 +36,8 @@ caios/
 │   ├── 07-phase5-agents.md          ← Phase 5 implementation notes (CAIOS-AGNT-001)
 │   ├── 08-frontend.md               ← production frontend + Vercel deployment notes (CAIOS-FE-001)
 │   ├── 09-deliverables.md           ← Phase 6 implementation notes (CAIOS-DEL-001)
-│   └── 10-qa.md                     ← Phase 7 implementation notes (CAIOS-QA-001)
+│   ├── 10-qa.md                     ← Phase 7 implementation notes (CAIOS-QA-001)
+│   └── 11-ops.md                    ← Phase 8 implementation notes (CAIOS-OPS-001)
 ├── infra/
 │   ├── docker-compose.yml           ← Layer 1: local stack (API + worker + Postgres/pgvector)
 │   ├── render.yaml                  ← Layer 2: Render free blueprint
@@ -55,11 +57,12 @@ caios/
 │   ├── app/coordination/            ← Phase 4: workflow registry, assignments, engine, gates, events
 │   ├── app/agents/                  ← Phase 5: the three §11 division agents (registry + governed runs)
 │   ├── app/deliverables/            ← Phases 6–7: deliverables schema/store, deterministic builders (md/docx/xlsx/pdf), report.generate handler, QA gate + revisions + version history, routes
-│   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows, /agents, /deliverables (+ QA/revise/versions)
+│   ├── app/ops/                     ← Phase 8: team roster (four §11 desks), ops trail, workflow→division allocation, cross-module ops overview
+│   ├── app/api/routes/              ← /health, /jobs/run, /maintenance/tick, /documents, /knowledge, /ai, /prompts, /assignments, /workflows, /agents, /deliverables (+ QA/revise/versions), /ops
 │   ├── tests/                       ← unit tests + real-Postgres integration harness
 │   └── Dockerfile                   ← same image for local, Render and the future VPS
 ├── frontend/                        ← production operator console (Vercel Root Directory; no build step)
-│   ├── index.html                   ← single-file app: overview, assignments+gates, knowledge, agents, AI console, usage, connection
+│   ├── index.html                   ← single-file app: overview, assignments+gates, knowledge, agents, AI console, usage, internal ops, connection
 │   └── vercel.json                  ← static preset, security headers, cleanUrls
 └── prototype/
     └── caios-ui.html                ← single-file UI prototype; live-API layer (LIVE/DEMO badges)
@@ -198,7 +201,8 @@ Full notes: `docs/08-frontend.md` (CAIOS-FE-001).
 | Production frontend | Single-file operator console (`frontend/`, monorepo + Vercel Root Directory): overview, assignments with gate approve/cancel, knowledge upload/search, agent registry with one-click workflows, AI console, usage & spend, connection manager; LIVE/DEMO honesty; `CORS_ORIGINS` allow-list on the API — **done** (see docs/08) |
 | 6 — Deliverables & document generation | Structured spec → deterministic artefact: `.md/.docx/.xlsx/.pdf` builders with provenance footers; `report.generate` on the queue (fulfils the runner's Phase 6 TODO); `/deliverables` + authorised streaming downloads; append-only artefact trail; formula-injection + PDF render guards; `STORAGE_LOCAL_DIR` dev adapter; frontend Deliverables view + AI-answer export — **done** (see docs/09) |
 | 7 — QA governance | QA gate on every deliverable (`draft → in_review → approved \| changes_requested`, reviewer from the verified principal, checklist + mandatory change comments); revisions as new spec versions with the gate reset; immutable `deliverable_versions` history under versioned storage keys; checksum-drift rule voids approval when approved bytes ever change; frontend QA column, decision modal, revise mode, version history — **done** (see docs/10) |
-| 8–10 | Not started (internal ops, deployment, continuous dev) |
+| 8 — Internal ops | Team roster for the four §11 desks (three agent divisions + Governance & Operations) with an append-only roster trail; workflow→division allocation asserted against the registry by unit tests; `/ops/overview` honest cross-module rollup (roster, open workload per division, queue health, deliverable QA states, AI ledger); frontend Internal Ops view — **done** (see docs/11) |
+| 9–10 | Not started (deployment, continuous dev) |
 
 ## Verification already performed
 
@@ -248,7 +252,12 @@ PostgreSQL 16 + pgvector (user-space via `pgserver`, or any `DATABASE_URL`):
   deterministic regenerate keeping approval, checksum drift voiding approval
   with `qa.reset`, request_changes → revise → v2 with the gate reset, v1
   artefact untouched in storage, illegal transitions 409 and cross-org 404s
-  (29/29).
+  (29/29). Full notes in docs/10.
+- **Phase 8 internal ops**: division-allocation unit-tested against the
+  workflow registry; real-PG integration covers roster CRUD (duplicate +
+  division 422s), trailed PATCHes with principal provenance, deactivation,
+  member events, the overview rollup counting seeded rows per division and
+  cross-org empties/404s (19/19).
 - **Production frontend** verified in headless Chromium against a real API +
   PG16: LIVE connect with `?api=&org=&token=`, gate **approve through the UI**
   (prompt-dialog note → COMPLETED, 7 trail events), **start assignment from an

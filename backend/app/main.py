@@ -92,7 +92,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=allowed,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Authorization", "Content-Type", "X-Job-Secret"],
     )
     app.include_router(health.router)
@@ -104,6 +104,8 @@ def create_app() -> FastAPI:
     app.include_router(coordination_router)
     app.include_router(agents_router)
     app.include_router(deliverables_router)
+    from app.ops.routes import router as ops_router
+    app.include_router(ops_router)
     return app
 
 
